@@ -57,49 +57,53 @@ async def health_check():
     print("[Health] Health check requested")
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
-# In backend/main.py
 
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
 async def analyze_by_address(address_query: str):
     try:
-        # STEP 1: Geocode the address using OpenStreetMap (Nominatim)
-        # Nominatim requires a User-Agent header as per their policy
-        headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
-        params = {
-            "q": address_query,
-            "format": "json",
-            "limit": 1,
-            "countrycodes": "gb" # Restrict to UK
-        }
+        # 1. Use IBex to resolve the address. 
+        # (Internal fallback to postcode is already handled in ibex_client.py)
+        target_property = await ibex_client.search_by_address(address_query)
+        
+        if not target_property or "geometry" not in target_property:
+            raise HTTPException(status_code=404, detail="Address not found in IBex records.")
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            geo_response = await client.get(
-                "https://nominatim.openstreetmap.org/search", 
-                params=params, 
-                headers=headers
-            )
-            geo_data = geo_response.json()
+        # 2. Robust Coordinate Extraction [Fix 1]
+        geom = target_property["geometry"]
+        geom_type = geom.get("type")
+        
+        if geom_type == "Point":
+            lng, lat = geom["coordinates"]
+        elif geom_type == "Polygon":
+            # Safely extract the first point of the exterior ring
+            try:
+                lng, lat = geom["coordinates"][0][0]
+            except (IndexError, TypeError):
+                # Fallback: check if the object has a pre-calculated centre_point extension
+                if target_property.get("centre_point"):
+                    lng = target_property["centre_point"].get("lon")
+                    lat = target_property["centre_point"].get("lat")
+                else:
+                    raise HTTPException(status_code=400, detail="Invalid Polygon structure.")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported spatial format: {geom_type}")
 
-        if not geo_data:
-            raise HTTPException(status_code=404, detail="Could not find coordinates for this address.")
-
-        lat = float(geo_data[0]["lat"])
-        lng = float(geo_data[0]["lon"])
-        display_name = geo_data[0]["display_name"]
-
-        # STEP 2: Use the resolved coordinates to search IBex
-        # Search for applications within 50m of this geocoded point
+        # 3. Perform analysis using the resolved coordinates
         applications = await ibex_client.search_by_location(
             latitude=lat,
             longitude=lng,
-            radius=50,
+            radius=50, 
             date_from=(date.today() - timedelta(days=3650)).isoformat()
         )
         
+        recommendations = []
+        if isinstance(applications, list) and len(applications) > 0:
+            recommendations.append(f"Found {len(applications)} historical records for this property.")
+            
         return PropertyAnalysisResponse(
-            property_reference=None, # OSM doesn't provide UPRNs
+            property_reference=target_property.get("uprn") or target_property.get("planning_reference"),
             planning_applications=applications if isinstance(applications, list) else [],
-            recommendations=[f"Located at: {display_name}"]
+            recommendations=recommendations
         )
 
     except Exception as e:
