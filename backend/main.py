@@ -1,12 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import os
 from dotenv import load_dotenv
-
+import httpx
 from models import PropertyAnalysisRequest, PropertyAnalysisResponse, ImprovementAnalysis
+from models import AddressAnalysisRequest
 from ibex_client import IBexClient
-
 from helpers.geocoding import geocode_postcode
 from helpers.ibex_service import fetch_planning_applications
 from helpers.application_filter import filter_by_improvement_type
@@ -40,46 +40,103 @@ IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
+@app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
+async def analyze_by_address(request: AddressAnalysisRequest): # Use the model here
+    try:
+        # STEP 1: Geocode Address via Nominatim
+        headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
+        # Use request.address_query instead of a standalone variable
+        params = {"q": request.address_query, "format": "json", "limit": 1, "countrycodes": "gb"}
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Proptech ROI Analysis API",
-        "endpoints": {
-            "GET /health": "Health check",
-            "POST /api/analyze": "Analyze property retrofit feasibility, ROI, timeline"
-        }
-    }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            geo_res = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
+            geo_data = geo_res.json()
 
+        if not geo_data:
+            raise HTTPException(status_code=404, detail="Address not found.")
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+        lat = float(geo_data[0]["lat"])
+        lng = float(geo_data[0]["lon"])
+        display_name = geo_data[0]["display_name"]
 
+        # STEP 2: Fetch Local Planning Data
+        applications = await fetch_planning_applications(ibex_client, lat, lng)
+        
+        # STEP 3: Run Full Analysis Loop
+        improvements_analysis = []
+        total_cost = 0
+        total_value_increase = 0
+        
+        for imp_type in request.desired_improvements: # Use request.desired_improvements
+            matching = filter_by_improvement_type(applications, imp_type)
+            approved_count = len(matching)
+            
+            avg_time = calculate_average_approval_time(matching)
+            examples = extract_examples(matching, limit=5)
+            
+            est_cost, _ = calculate_cost(imp_type, matching)
+            val_inc, _ = calculate_value_increase(imp_type, est_cost)
+            
+            roi = calculate_roi(est_cost, val_inc)
+            feasibility = calculate_feasibility(approved_count)
+            
+            improvements_analysis.append(ImprovementAnalysis(
+                improvement_type=imp_type,
+                feasibility=feasibility,
+                approved_examples=approved_count,
+                average_time_days=avg_time,
+                estimated_cost=est_cost,
+                estimated_roi_percent=roi,
+                green_premium_value=val_inc,
+                examples=examples
+            ))
+            
+            total_cost += est_cost
+            total_value_increase += val_inc
+        
+        total_roi = calculate_roi(total_cost, total_value_increase)
+        # Use request.budget
+        within_budget, _ = check_budget(total_cost, request.budget)
+        high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
+        
+        summary = generate_summary(
+            postcode=request.address_query,
+            num_improvements=len(request.desired_improvements),
+            total_cost=total_cost,
+            total_value_increase=total_value_increase,
+            total_roi=total_roi,
+            budget=request.budget,
+            high_feasibility_count=high_feasibility_count,
+            within_budget=within_budget
+        )
+        
+        return PropertyAnalysisResponse(
+            property_reference=display_name,
+            location={"latitude": lat, "longitude": lng},
+            budget=request.budget,
+            improvements=improvements_analysis,
+            total_cost=total_cost,
+            total_roi_percent=total_roi,
+            total_value_increase=total_value_increase,
+            summary=summary
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/analyze", response_model=PropertyAnalysisResponse)
 async def analyze_property(request: PropertyAnalysisRequest):
     print(f"\n{'='*70}")
-    print(f"Analyzing Reference/Postcode: {request.property_reference} | Budget: £{request.budget:,.2f}")
+    print(f"Analyzing: {request.property_reference} | Budget: £{request.budget:,.2f}")
     print(f"Improvements: {', '.join(request.desired_improvements)}")
     print(f"{'='*70}\n")
     
     try:
-        # Treat the property_reference as a Postcode for the free tier APIs we are using
-        postcode = request.property_reference
-        
-        # 1. Handle Location Data
-        if request.latitude and request.longitude:
-            latitude, longitude = request.latitude, request.longitude
-            print(f"✓ Using provided coordinates ({latitude}, {longitude})")
-        else:
-            coords = await geocode_postcode(postcode)
-            if not coords:
-                raise HTTPException(status_code=400, detail=f"Invalid postcode or unable to geocode: {postcode}")
-            latitude, longitude = coords
-
-        # 2. Fetch actual property data (EPC rating and Land Registry Price Paid)
-        current_epc, property_value = await fetch_property_context(postcode=postcode)
+        # TODO: Get current EPC rating for property
+        coords = await geocode_postcode(request.property_reference)
+        if not coords:
+            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.property_reference}")
+        latitude, longitude = coords
         
         # 3. Check local planning applications via IBex
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -132,7 +189,7 @@ async def analyze_property(request: PropertyAnalysisRequest):
         high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
         
         summary = generate_summary(
-            postcode=postcode,
+            postcode=request.property_reference,
             num_improvements=len(request.desired_improvements),
             total_cost=total_cost,
             total_value_increase=total_value_increase,

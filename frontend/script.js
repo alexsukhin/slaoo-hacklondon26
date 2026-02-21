@@ -39,18 +39,26 @@ async function analyzeProperty(data) {
     loadingState.style.display = 'block';
     submitBtn.disabled = true;
     
+    // Construct the payload to match your AddressAnalysisRequest model
+    const payload = {
+        address_query: data.property_reference, // Use the address entered in the UPRN box
+        budget: data.budget,
+        desired_improvements: data.desired_improvements
+    };
+    
     try {
-        const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        const response = await fetch(`${API_BASE_URL}/api/property/analyze-by-address`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload) // Send payload as JSON body
         });
         
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.detail || 'Analysis failed');
+            // This handles the [object Object] error by converting the error detail to a string
+            throw new Error(typeof error.detail === 'object' ? JSON.stringify(error.detail) : error.detail);
         }
         
         const results = await response.json();
@@ -58,7 +66,7 @@ async function analyzeProperty(data) {
         
     } catch (error) {
         console.error('Error:', error);
-        showError(error.message || 'Failed to analyze property. Please check your connection and try again.');
+        showError(error.message || 'Failed to analyze property.');
     } finally {
         loadingState.style.display = 'none';
         submitBtn.disabled = false;
