@@ -91,6 +91,8 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             for imp in ["insulation", "heat_pump", "solar", "windows"]:
                 if imp not in request.desired_improvements:
                     suggestions.append(imp.capitalize())
+        # --- Step 2: Fetch property context (EPC, Land Registry) ---
+        current_epc, property_value, recommendations = await fetch_property_context(postcode=request.address_query)
 
         # --- Step 3: Fetch local planning applications via IBex ---
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -105,18 +107,20 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             avg_time = calculate_average_approval_time(matching)
             examples = extract_examples(matching, limit=5)
 
-            # Use the real metrics for property-specific cost scaling
+            # REVERTED to match your current cost_calculator.py signature
             estimated_cost, cost_explanation = calculate_cost(
                 improvement_type=improvement_type, 
                 matching_applications=matching,
                 property_metrics=property_metrics
             )
 
+            # FIXED: Removed duplicate argument and added missing comma
             value_increase, value_explanation = calculate_value_increase(
                 improvement_type=improvement_type,
                 estimated_cost=estimated_cost,
                 current_epc=current_epc,
-                property_value=None # Can be extended with Land Registry API
+                property_value=property_value,
+                recommendations=recommendations 
             )
 
             roi = calculate_roi(estimated_cost, value_increase)
@@ -130,6 +134,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 estimated_cost=estimated_cost,
                 estimated_roi_percent=roi,
                 green_premium_value=value_increase,
+                value_explanation=value_explanation, 
                 examples=examples
             ))
 
