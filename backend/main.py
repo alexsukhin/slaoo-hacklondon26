@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 import httpx
 from models import PropertyAnalysisRequest, PropertyAnalysisResponse, ImprovementAnalysis
+from models import AddressAnalysisRequest
 from ibex_client import IBexClient
 from helpers.geocoding import geocode_postcode
 from helpers.ibex_service import fetch_planning_applications
@@ -36,13 +37,13 @@ IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
-
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
-async def analyze_by_address(address_query: str, budget: float = 15000.0):
+async def analyze_by_address(request: AddressAnalysisRequest): # Use the model here
     try:
         # STEP 1: Geocode Address via Nominatim
         headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
-        params = {"q": address_query, "format": "json", "limit": 1, "countrycodes": "gb"}
+        # Use request.address_query instead of a standalone variable
+        params = {"q": request.address_query, "format": "json", "limit": 1, "countrycodes": "gb"}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
             geo_res = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
@@ -58,15 +59,12 @@ async def analyze_by_address(address_query: str, budget: float = 15000.0):
         # STEP 2: Fetch Local Planning Data
         applications = await fetch_planning_applications(ibex_client, lat, lng)
         
-        # Define default improvements if none provided via query (or update model to accept them)
-        desired_improvements = ["solar", "insulation", "windows", "heat_pump"]
-        
+        # STEP 3: Run Full Analysis Loop
         improvements_analysis = []
         total_cost = 0
         total_value_increase = 0
         
-        # STEP 3: Run Full Analysis Loop (Fixes the missing field errors)
-        for imp_type in desired_improvements:
+        for imp_type in request.desired_improvements: # Use request.desired_improvements
             matching = filter_by_improvement_type(applications, imp_type)
             approved_count = len(matching)
             
@@ -94,25 +92,25 @@ async def analyze_by_address(address_query: str, budget: float = 15000.0):
             total_value_increase += val_inc
         
         total_roi = calculate_roi(total_cost, total_value_increase)
-        within_budget, _ = check_budget(total_cost, budget)
+        # Use request.budget
+        within_budget, _ = check_budget(total_cost, request.budget)
         high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
         
         summary = generate_summary(
-            postcode=address_query,
-            num_improvements=len(desired_improvements),
+            postcode=request.address_query,
+            num_improvements=len(request.desired_improvements),
             total_cost=total_cost,
             total_value_increase=total_value_increase,
             total_roi=total_roi,
-            budget=budget,
+            budget=request.budget,
             high_feasibility_count=high_feasibility_count,
             within_budget=within_budget
         )
         
-        # Final response now matches the PropertyAnalysisResponse model perfectly
         return PropertyAnalysisResponse(
             property_reference=display_name,
             location={"latitude": lat, "longitude": lng},
-            budget=budget,
+            budget=request.budget,
             improvements=improvements_analysis,
             total_cost=total_cost,
             total_roi_percent=total_roi,

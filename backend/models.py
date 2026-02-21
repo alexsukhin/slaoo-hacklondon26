@@ -44,3 +44,8 @@ class PropertyAnalysisResponse(BaseModel):
     total_roi_percent: float
     total_value_increase: float
     summary: str
+
+class AddressAnalysisRequest(BaseModel):
+    address_query: str
+    budget: float
+    desired_improvements: List[str]
