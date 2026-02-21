@@ -1,25 +1,26 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional, List
-from datetime import date, datetime, timedelta
+from datetime import datetime, date, timedelta
 import os
-import httpx
 from dotenv import load_dotenv
-
-from models import (
-    PropertySearchRequest,
-    AreaAnalysisRequest,
-    RetrofitAnalysisRequest,
-    PropertyAnalysisResponse,
-    PlanningApplicationFilter
-)
+import httpx
+from models import PropertyAnalysisRequest, PropertyAnalysisResponse, ImprovementAnalysis
 from ibex_client import IBexClient
+from helpers.geocoding import geocode_postcode
+from helpers.ibex_service import fetch_planning_applications
+from helpers.application_filter import filter_by_improvement_type
+from helpers.timeline_calculator import calculate_average_approval_time, extract_examples
+from helpers.cost_calculator import calculate_cost, check_budget
+from helpers.value_calculator import calculate_value_increase
+from helpers.roi_calculator import calculate_roi
+from helpers.feasibility_calculator import calculate_feasibility
+from helpers.summary_generator import generate_summary
 
 load_dotenv()
 
 app = FastAPI(
-    title="Proptech Analysis API",
-    description="API for property energy efficiency and planning analysis",
+    title="Proptech ROI Analysis API",
+    description="Cost-benefit analysis for property energy efficiency upgrades",
     version="1.0.0"
 )
 
@@ -33,302 +34,198 @@ app.add_middleware(
 
 IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
-
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Proptech Analysis API",
-        "endpoints": {
-            "GET /health": "Health check",
-            "POST /api/property/analyze": "Analyze property with planning data",
-            "POST /api/area/retrofits": "Find retrofit projects in area",
-            "GET /api/planning/search": "Search planning applications",
-            "POST /api/planning/search": "Search planning applications (POST)",
-            "GET /api/council/{council_id}/stats": "Get council statistics"
-        }
-    }
-
-
-@app.get("/health")
-async def health_check():
-    print("[Health] Health check requested")
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
-
-
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
-async def analyze_by_address(address_query: str):
+async def analyze_by_address(address_query: str, budget: float = 15000.0):
     try:
-        # 1. Use IBex to resolve the address. 
-        # (Internal fallback to postcode is already handled in ibex_client.py)
-        target_property = await ibex_client.search_by_address(address_query)
-        
-        if not target_property or "geometry" not in target_property:
-            raise HTTPException(status_code=404, detail="Address not found in IBex records.")
+        # STEP 1: Geocode Address via Nominatim
+        headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
+        params = {"q": address_query, "format": "json", "limit": 1, "countrycodes": "gb"}
 
-        # 2. Robust Coordinate Extraction [Fix 1]
-        geom = target_property["geometry"]
-        geom_type = geom.get("type")
-        
-        if geom_type == "Point":
-            lng, lat = geom["coordinates"]
-        elif geom_type == "Polygon":
-            # Safely extract the first point of the exterior ring
-            try:
-                lng, lat = geom["coordinates"][0][0]
-            except (IndexError, TypeError):
-                # Fallback: check if the object has a pre-calculated centre_point extension
-                if target_property.get("centre_point"):
-                    lng = target_property["centre_point"].get("lon")
-                    lat = target_property["centre_point"].get("lat")
-                else:
-                    raise HTTPException(status_code=400, detail="Invalid Polygon structure.")
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported spatial format: {geom_type}")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            geo_res = await client.get("https://nominatim.openstreetmap.org/search", params=params, headers=headers)
+            geo_data = geo_res.json()
 
-        # 3. Perform analysis using the resolved coordinates
-        applications = await ibex_client.search_by_location(
-            latitude=lat,
-            longitude=lng,
-            radius=50, 
-            date_from=(date.today() - timedelta(days=3650)).isoformat()
+        if not geo_data:
+            raise HTTPException(status_code=404, detail="Address not found.")
+
+        lat = float(geo_data[0]["lat"])
+        lng = float(geo_data[0]["lon"])
+        display_name = geo_data[0]["display_name"]
+
+        # STEP 2: Fetch Local Planning Data
+        applications = await fetch_planning_applications(ibex_client, lat, lng)
+        
+        # Define default improvements if none provided via query (or update model to accept them)
+        desired_improvements = ["solar", "insulation", "windows", "heat_pump"]
+        
+        improvements_analysis = []
+        total_cost = 0
+        total_value_increase = 0
+        
+        # STEP 3: Run Full Analysis Loop (Fixes the missing field errors)
+        for imp_type in desired_improvements:
+            matching = filter_by_improvement_type(applications, imp_type)
+            approved_count = len(matching)
+            
+            avg_time = calculate_average_approval_time(matching)
+            examples = extract_examples(matching, limit=5)
+            
+            est_cost, _ = calculate_cost(imp_type, matching)
+            val_inc, _ = calculate_value_increase(imp_type, est_cost)
+            
+            roi = calculate_roi(est_cost, val_inc)
+            feasibility = calculate_feasibility(approved_count)
+            
+            improvements_analysis.append(ImprovementAnalysis(
+                improvement_type=imp_type,
+                feasibility=feasibility,
+                approved_examples=approved_count,
+                average_time_days=avg_time,
+                estimated_cost=est_cost,
+                estimated_roi_percent=roi,
+                green_premium_value=val_inc,
+                examples=examples
+            ))
+            
+            total_cost += est_cost
+            total_value_increase += val_inc
+        
+        total_roi = calculate_roi(total_cost, total_value_increase)
+        within_budget, _ = check_budget(total_cost, budget)
+        high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
+        
+        summary = generate_summary(
+            postcode=address_query,
+            num_improvements=len(desired_improvements),
+            total_cost=total_cost,
+            total_value_increase=total_value_increase,
+            total_roi=total_roi,
+            budget=budget,
+            high_feasibility_count=high_feasibility_count,
+            within_budget=within_budget
         )
         
-        recommendations = []
-        if isinstance(applications, list) and len(applications) > 0:
-            recommendations.append(f"Found {len(applications)} historical records for this property.")
-            
+        # Final response now matches the PropertyAnalysisResponse model perfectly
         return PropertyAnalysisResponse(
-            property_reference=target_property.get("uprn") or target_property.get("planning_reference"),
-            planning_applications=applications if isinstance(applications, list) else [],
-            recommendations=recommendations
+            property_reference=display_name,
+            location={"latitude": lat, "longitude": lng},
+            budget=budget,
+            improvements=improvements_analysis,
+            total_cost=total_cost,
+            total_roi_percent=total_roi,
+            total_value_increase=total_value_increase,
+            summary=summary
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/area/retrofits")
-async def find_area_retrofits(request: RetrofitAnalysisRequest):
-    print(f"\n[Retrofit Analysis] Searching for {request.improvement_type} retrofits")
-    print(f"[Retrofit Analysis] Location: ({request.latitude}, {request.longitude}), radius: {request.radius}m")
+@app.post("/api/analyze")
+async def analyze_property(request: PropertyAnalysisRequest):
+    print(f"\n{'='*70}")
+    print(f"Analyzing: {request.property_reference} | Budget: £{request.budget:,.2f}")
+    print(f"Improvements: {', '.join(request.desired_improvements)}")
+    print(f"{'='*70}\n")
     
     try:
-        date_to = date.today().isoformat()
-        date_from = (date.today() - timedelta(days=1095)).isoformat()
+        # TODO: Get current EPC rating for property
+        coords = await geocode_postcode(request.property_reference)
+        if not coords:
+            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.property_reference}")
+        latitude, longitude = coords
         
-        improvement_keywords = {
-            "solar": ["solar", "photovoltaic", "pv panel"],
-            "insulation": ["insulation", "wall insulation", "external wall", "internal wall"],
-            "windows": ["window", "double glazing", "triple glazing"],
-            "heat_pump": ["heat pump", "air source", "ground source"],
-        }
+        # TODO: Check Article 4 / conservation area restrictions
+        applications = await fetch_planning_applications(ibex_client, latitude, longitude)
         
-        keywords = improvement_keywords.get(request.improvement_type.lower(), [request.improvement_type])
+        improvements_analysis = []
+        total_cost = 0
+        total_value_increase = 0
         
-        filters = {
-            "normalised_decision": ["Approved"],
-            "normalised_application_type": ["full planning application", "householder planning application"]
-        }
-        
-        applications = await ibex_client.search_by_location(
-            latitude=request.latitude,
-            longitude=request.longitude,
-            radius=request.radius,
-            date_from=date_from,
-            date_to=date_to,
-            filters=filters
-        )
-        
-        filtered_retrofits = []
-        if isinstance(applications, list):
-            for app in applications:
-                proposal = app.get("proposal", "").lower()
-                if any(keyword in proposal for keyword in keywords):
-                    filtered_retrofits.append(app)
-                    print(f"[Retrofit Analysis] Match found: {app.get('planning_reference')} - {app.get('proposal')[:100]}")
-        
-        print(f"[Retrofit Analysis] Found {len(filtered_retrofits)} matching retrofits out of {len(applications) if isinstance(applications, list) else 0} total applications")
-        
-        return {
-            "improvement_type": request.improvement_type,
-            "total_matches": len(filtered_retrofits),
-            "retrofits": filtered_retrofits,
-            "area_info": {
-                "latitude": request.latitude,
-                "longitude": request.longitude,
-                "radius_meters": request.radius
-            }
-        }
-    
-    except Exception as e:
-        print(f"[Retrofit Analysis] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Retrofit search failed: {str(e)}")
-
-
-@app.get("/api/planning/search")
-@app.post("/api/planning/search")
-async def search_planning_applications(
-    latitude: float = Query(..., description="Latitude"),
-    longitude: float = Query(..., description="Longitude"),
-    radius: int = Query(default=500, ge=50, le=2000, description="Search radius in meters"),
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)"),
-    decision_filter: Optional[List[str]] = Query(None, description="Filter by decision status")
-):
-    print(f"\n[Planning Search] Searching at ({latitude}, {longitude}), radius: {radius}m")
-    
-    try:
-        if not date_from:
-            date_from = (date.today() - timedelta(days=365)).isoformat()
-        if not date_to:
-            date_to = date.today().isoformat()
-        
-        filters = {}
-        if decision_filter:
-            filters["normalised_decision"] = decision_filter
-        
-        applications = await ibex_client.search_by_location(
-            latitude=latitude,
-            longitude=longitude,
-            radius=radius,
-            date_from=date_from,
-            date_to=date_to,
-            filters=filters if filters else None
-        )
-        
-        print(f"[Planning Search] Returning {len(applications) if isinstance(applications, list) else 0} applications")
-        
-        return {
-            "total_results": len(applications) if isinstance(applications, list) else 0,
-            "search_params": {
-                "latitude": latitude,
-                "longitude": longitude,
-                "radius": radius,
-                "date_from": date_from,
-                "date_to": date_to
-            },
-            "applications": applications
-        }
-    
-    except Exception as e:
-        print(f"[Planning Search] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-
-@app.get("/api/council/{council_id}/stats")
-async def get_council_statistics(
-    council_id: int,
-    date_from: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    date_to: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
-):
-    print(f"\n[Council Stats] Fetching statistics for council {council_id}")
-    
-    try:
-        if not date_from:
-            date_from = (date.today() - timedelta(days=365)).isoformat()
-        if not date_to:
-            date_to = date.today().isoformat()
-        
-        stats = await ibex_client.get_council_stats(
-            council_id=council_id,
-            date_from=date_from,
-            date_to=date_to
-        )
-        
-        print(f"[Council Stats] Retrieved stats: {stats}")
-        
-        return {
-            "council_id": council_id,
-            "date_range": {
-                "from": date_from,
-                "to": date_to
-            },
-            "statistics": stats
-        }
-    
-    except Exception as e:
-        print(f"[Council Stats] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get council stats: {str(e)}")
-
-
-# takes long and lat as input 
-@app.post("/api/area/analysis")
-async def analyze_area(request: AreaAnalysisRequest):
-    print(f"\n[Area Analysis] Analyzing area at ({request.latitude}, {request.longitude})")
-    
-    try:
-        date_to = request.date_to.isoformat() if request.date_to else date.today().isoformat()
-        date_from = request.date_from.isoformat() if request.date_from else (date.today() - timedelta(days=730)).isoformat()
-        
-        applications = await ibex_client.search_by_location(
-            latitude=request.latitude,
-            longitude=request.longitude,
-            radius=request.radius,
-            date_from=date_from,
-            date_to=date_to
-        )
-        
-        analysis = {
-            "total_applications": len(applications) if isinstance(applications, list) else 0,
-            "approved": 0,
-            "refused": 0,
-            "pending": 0,
-            "project_types": {},
-            "average_decision_time_days": 0
-        }
-        
-        if isinstance(applications, list):
-            decision_times = []
+        for improvement_type in request.desired_improvements:
+            print(f"\nAnalyzing: {improvement_type.upper()}")
             
-            for app in applications:
-                decision = app.get("normalised_decision", "pending")
-                if decision == "Approved":
-                    analysis["approved"] += 1
-                elif decision == "Refused":
-                    analysis["refused"] += 1
-                else:
-                    analysis["pending"] += 1
-                
-                project_type = app.get("project_type", "unknown")
-                analysis["project_types"][project_type] = analysis["project_types"].get(project_type, 0) + 1
-                
-                if app.get("application_date") and app.get("decided_date"):
-                    try:
-                        app_date = datetime.fromisoformat(app["application_date"].replace('Z', '+00:00'))
-                        dec_date = datetime.fromisoformat(app["decided_date"].replace('Z', '+00:00'))
-                        decision_times.append((dec_date - app_date).days)
-                    except:
-                        pass
+            # TODO: Improve search beyond string matching
+            matching = filter_by_improvement_type(applications, improvement_type)
+            approved_count = len(matching)
             
-            if decision_times:
-                analysis["average_decision_time_days"] = sum(decision_times) / len(decision_times)
+            avg_time = calculate_average_approval_time(matching)
+            examples = extract_examples(matching, limit=5)
+            
+            # TODO: Use real cost data from similar properties
+            estimated_cost, cost_explanation = calculate_cost(improvement_type, matching)
+            
+            # TODO: Join EPC + Price Paid datasets for accurate green premium
+            value_increase, value_explanation = calculate_value_increase(
+                improvement_type, 
+                estimated_cost,
+                property_value=None  # TODO: Get from Land Registry
+            )
+            
+            roi = calculate_roi(estimated_cost, value_increase)
+            feasibility = calculate_feasibility(approved_count)
+            
+            print(f"✓ {approved_count} examples | £{estimated_cost:,} cost | {roi:.1f}% ROI | {feasibility} feasibility")
+            
+            improvements_analysis.append(ImprovementAnalysis(
+                improvement_type=improvement_type,
+                feasibility=feasibility,
+                approved_examples=approved_count,
+                average_time_days=avg_time,
+                estimated_cost=estimated_cost,
+                estimated_roi_percent=roi,
+                green_premium_value=value_increase,
+                examples=examples
+            ))
+            
+            total_cost += estimated_cost
+            total_value_increase += value_increase
         
-        print(f"[Area Analysis] Analysis complete: {analysis}")
+        total_roi = calculate_roi(total_cost, total_value_increase)
+        within_budget, budget_text = check_budget(total_cost, request.budget)
+        high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
         
-        return {
-            "location": {
-                "latitude": request.latitude,
-                "longitude": request.longitude,
-                "radius_meters": request.radius
-            },
-            "date_range": {
-                "from": date_from,
-                "to": date_to
-            },
-            "analysis": analysis,
-            "applications": applications if isinstance(applications, list) else []
-        }
+        # TODO: Use LLM (Gemini) to generate intelligent summary
+        summary = generate_summary(
+            postcode=request.property_reference,
+            num_improvements=len(request.desired_improvements),
+            total_cost=total_cost,
+            total_value_increase=total_value_increase,
+            total_roi=total_roi,
+            budget=request.budget,
+            high_feasibility_count=high_feasibility_count,
+            within_budget=within_budget
+        )
+        
+        print(f"\n{'='*70}")
+        print(f"TOTAL: £{total_cost:,} cost | £{total_value_increase:,} value | {total_roi:.1f}% ROI")
+        print(f"{budget_text}")
+        print(f"{'='*70}\n")
+        
+        return PropertyAnalysisResponse(
+            property_reference=request.property_reference,
+            location={"latitude": latitude, "longitude": longitude},
+            budget=request.budget,
+            improvements=improvements_analysis,
+            total_cost=total_cost,
+            total_roi_percent=total_roi,
+            total_value_increase=total_value_increase,
+            summary=summary
+        )
     
     except Exception as e:
-        print(f"[Area Analysis] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Area analysis failed: {str(e)}")
+        print(f"\n❌ ERROR: {str(e)}\n")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
     import uvicorn
-    print("\n" + "="*50)
-    print("Starting Proptech Analysis API")
-    print("="*50 + "\n")
+    print("\n" + "="*70)
+    print("   PROPTECH ROI ANALYSIS API")
+    print("="*70)
+    print("\n🏠 POST /api/analyze")
+    print("👀 Docs: http://localhost:8000/docs\n")
+    print("="*70 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

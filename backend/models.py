@@ -3,11 +3,14 @@ from typing import Optional, List, Dict, Any
 
 
 class PropertyAnalysisRequest(BaseModel):
-    property_reference: str = Field(description="UPRN or property reference")
+    # Added address field to support geocoding search
+    address: str = Field(description="Full address or postcode")
+    property_reference: Optional[str] = Field(default=None, description="UPRN or property reference")
     budget: float = Field(description="Budget in GBP")
     desired_improvements: List[str] = Field(
         description="solar, insulation, windows, heat_pump"
     )
+    # Lat/Lng remain optional if already known
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
