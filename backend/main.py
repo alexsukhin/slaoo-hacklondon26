@@ -79,15 +79,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 if imp not in request.desired_improvements:
                     suggestions.append(imp.capitalize())
 
-
-        compliance_status = "ON TRACK" if EPC_BAND_TO_NUMERIC[projected_epc] <= EPC_BAND_TO_NUMERIC["C"] else "OFF TRACK"
-        
-        suggestions = []
-        if compliance_status != "ON TRACK":
-            for imp in ["insulation", "heat_pump", "solar", "windows"]:
-                if imp not in request.desired_improvements:
-                    suggestions.append(imp.capitalize())
-        # --- Step 2: Fetch property context (EPC, Land Registry) ---
+        # --- Step 2 (Redundant block in source): Fetch property context (EPC, Land Registry) ---
         current_epc, property_value, recommendations = await fetch_property_context(postcode=request.address_query)
 
         # --- Step 3: Fetch local planning applications via IBex ---
