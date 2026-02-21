@@ -1,12 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, date, timedelta
 import os
 from dotenv import load_dotenv
 import httpx
 from models import PropertyAnalysisResponse, ImprovementAnalysis, AddressAnalysisRequest
 from ibex_client import IBexClient
-from helpers.geocoding import geocode_postcode
 from helpers.ibex_service import fetch_planning_applications
 from helpers.application_filter import filter_by_improvement_type
 from helpers.timeline_calculator import calculate_average_approval_time, extract_examples
@@ -58,7 +56,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         latitude = float(geo_data[0]["lat"])
         longitude = float(geo_data[0]["lon"])
         display_name = geo_data[0]["display_name"]
-        
+
         # --- Step 2: Fetch property context (EPC, Land Registry) ---
         current_epc, property_value = await fetch_property_context(postcode=request.address_query)
 
