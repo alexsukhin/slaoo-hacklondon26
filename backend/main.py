@@ -4,18 +4,14 @@ from datetime import datetime, date, timedelta
 import os
 from dotenv import load_dotenv
 import httpx
-from models import PropertyAnalysisRequest, PropertyAnalysisResponse, ImprovementAnalysis
-from models import AddressAnalysisRequest
+from models import PropertyAnalysisResponse, ImprovementAnalysis, AddressAnalysisRequest
 from ibex_client import IBexClient
 from helpers.geocoding import geocode_postcode
 from helpers.ibex_service import fetch_planning_applications
 from helpers.application_filter import filter_by_improvement_type
 from helpers.timeline_calculator import calculate_average_approval_time, extract_examples
 from helpers.cost_calculator import calculate_cost, check_budget
-
-# Updated imports to include our new functions
 from helpers.value_calculator import calculate_value_increase, fetch_property_context
-
 from helpers.roi_calculator import calculate_roi
 from helpers.feasibility_calculator import calculate_feasibility
 from helpers.summary_generator import generate_summary
@@ -40,12 +36,16 @@ IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
+
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
-async def analyze_by_address(request: AddressAnalysisRequest): # Use the model here
+async def analyze_by_address(request: AddressAnalysisRequest):
+    """
+    Full property analysis by address/postcode.
+    Handles geocoding, fetching property context, planning applications, cost, ROI, and summary.
+    """
     try:
-        # STEP 1: Geocode Address via Nominatim
+        # --- Step 1: Geocode address ---
         headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
-        # Use request.address_query instead of a standalone variable
         params = {"q": request.address_query, "format": "json", "limit": 1, "countrycodes": "gb"}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -55,50 +55,59 @@ async def analyze_by_address(request: AddressAnalysisRequest): # Use the model h
         if not geo_data:
             raise HTTPException(status_code=404, detail="Address not found.")
 
-        lat = float(geo_data[0]["lat"])
-        lng = float(geo_data[0]["lon"])
+        latitude = float(geo_data[0]["lat"])
+        longitude = float(geo_data[0]["lon"])
         display_name = geo_data[0]["display_name"]
-
-        # STEP 2: Fetch Local Planning Data
-        applications = await fetch_planning_applications(ibex_client, lat, lng)
         
-        # STEP 3: Run Full Analysis Loop
+        # --- Step 2: Fetch property context (EPC, Land Registry) ---
+        current_epc, property_value = await fetch_property_context(postcode=request.address_query)
+
+        # --- Step 3: Fetch local planning applications via IBex ---
+        applications = await fetch_planning_applications(ibex_client, latitude, longitude)
+
+        # --- Step 4: Analyze each desired improvement ---
         improvements_analysis = []
         total_cost = 0
         total_value_increase = 0
-        
-        for imp_type in request.desired_improvements: # Use request.desired_improvements
-            matching = filter_by_improvement_type(applications, imp_type)
+
+        for improvement_type in request.desired_improvements:
+            matching = filter_by_improvement_type(applications, improvement_type)
             approved_count = len(matching)
-            
             avg_time = calculate_average_approval_time(matching)
             examples = extract_examples(matching, limit=5)
-            
-            est_cost, _ = calculate_cost(imp_type, matching)
-            val_inc, _ = calculate_value_increase(imp_type, est_cost)
-            
-            roi = calculate_roi(est_cost, val_inc)
+
+            estimated_cost, cost_explanation = calculate_cost(improvement_type, matching)
+
+            value_increase, value_explanation = calculate_value_increase(
+                improvement_type=improvement_type,
+                estimated_cost=estimated_cost,
+                current_epc=current_epc,
+                property_value=property_value
+            )
+
+            roi = calculate_roi(estimated_cost, value_increase)
             feasibility = calculate_feasibility(approved_count)
-            
+
             improvements_analysis.append(ImprovementAnalysis(
-                improvement_type=imp_type,
+                improvement_type=improvement_type,
                 feasibility=feasibility,
                 approved_examples=approved_count,
                 average_time_days=avg_time,
-                estimated_cost=est_cost,
+                estimated_cost=estimated_cost,
                 estimated_roi_percent=roi,
-                green_premium_value=val_inc,
+                green_premium_value=value_increase,
+                value_explanation=value_explanation,
                 examples=examples
             ))
-            
-            total_cost += est_cost
-            total_value_increase += val_inc
-        
+
+            total_cost += estimated_cost
+            total_value_increase += value_increase
+
+        # --- Step 5: Calculate total ROI & budget feasibility ---
         total_roi = calculate_roi(total_cost, total_value_increase)
-        # Use request.budget
         within_budget, _ = check_budget(total_cost, request.budget)
         high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
-        
+
         summary = generate_summary(
             postcode=request.address_query,
             num_improvements=len(request.desired_improvements),
@@ -109,103 +118,9 @@ async def analyze_by_address(request: AddressAnalysisRequest): # Use the model h
             high_feasibility_count=high_feasibility_count,
             within_budget=within_budget
         )
-        
+
         return PropertyAnalysisResponse(
             property_reference=display_name,
-            location={"latitude": lat, "longitude": lng},
-            budget=request.budget,
-            improvements=improvements_analysis,
-            total_cost=total_cost,
-            total_roi_percent=total_roi,
-            total_value_increase=total_value_increase,
-            summary=summary
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/analyze", response_model=PropertyAnalysisResponse)
-async def analyze_property(request: PropertyAnalysisRequest):
-    print(f"\n{'='*70}")
-    print(f"Analyzing: {request.property_reference} | Budget: £{request.budget:,.2f}")
-    print(f"Improvements: {', '.join(request.desired_improvements)}")
-    print(f"{'='*70}\n")
-    
-    try:
-        # TODO: Get current EPC rating for property
-        coords = await geocode_postcode(request.property_reference)
-        if not coords:
-            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.property_reference}")
-        latitude, longitude = coords
-        
-        # 3. Check local planning applications via IBex
-        applications = await fetch_planning_applications(ibex_client, latitude, longitude)
-        
-        improvements_analysis = []
-        total_cost = 0
-        total_value_increase = 0
-        
-        for improvement_type in request.desired_improvements:
-            print(f"\nAnalyzing: {improvement_type.upper()}")
-            
-            matching = filter_by_improvement_type(applications, improvement_type)
-            approved_count = len(matching)
-            
-            avg_time = calculate_average_approval_time(matching)
-            examples = extract_examples(matching, limit=5)
-            
-            estimated_cost, cost_explanation = calculate_cost(improvement_type, matching)
-            
-            # 4. Use real Land Registry & EPC Data for Valuation
-            value_increase, value_explanation = calculate_value_increase(
-                improvement_type=improvement_type, 
-                estimated_cost=estimated_cost,
-                current_epc=current_epc,
-                property_value=property_value
-            )
-            
-            roi = calculate_roi(estimated_cost, value_increase)
-            feasibility = calculate_feasibility(approved_count)
-            
-            print(f"✓ {approved_count} examples | £{estimated_cost:,} cost | {roi:.1f}% ROI | {feasibility} feasibility")
-            
-            improvements_analysis.append(ImprovementAnalysis(
-                improvement_type=improvement_type,
-                feasibility=feasibility,
-                approved_examples=approved_count,
-                average_time_days=avg_time,
-                estimated_cost=estimated_cost,
-                estimated_roi_percent=roi,
-                green_premium_value=value_increase,
-                value_explanation=value_explanation,  # Passing the new explanation to the frontend!
-                examples=examples
-            ))
-            
-            total_cost += estimated_cost
-            total_value_increase += value_increase
-        
-        total_roi = calculate_roi(total_cost, total_value_increase)
-        within_budget, budget_text = check_budget(total_cost, request.budget)
-        high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
-        
-        summary = generate_summary(
-            postcode=request.property_reference,
-            num_improvements=len(request.desired_improvements),
-            total_cost=total_cost,
-            total_value_increase=total_value_increase,
-            total_roi=total_roi,
-            budget=request.budget,
-            high_feasibility_count=high_feasibility_count,
-            within_budget=within_budget
-        )
-        
-        print(f"\n{'='*70}")
-        print(f"TOTAL: £{total_cost:,} cost | £{total_value_increase:,.2f} value | {total_roi:.1f}% ROI")
-        print(f"{budget_text}")
-        print(f"{'='*70}\n")
-        
-        return PropertyAnalysisResponse(
-            property_reference=request.property_reference,
             location={"latitude": latitude, "longitude": longitude},
             budget=request.budget,
             improvements=improvements_analysis,
@@ -214,9 +129,8 @@ async def analyze_property(request: PropertyAnalysisRequest):
             total_value_increase=total_value_increase,
             summary=summary
         )
-    
+
     except Exception as e:
-        print(f"\n❌ ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -225,7 +139,7 @@ if __name__ == "__main__":
     print("\n" + "="*70)
     print("   PROPTECH ROI ANALYSIS API")
     print("="*70)
-    print("\n🏠 POST /api/analyze")
+    print("\n🏠 POST /api/property/analyze-by-address")
     print("👀 Docs: http://localhost:8000/docs\n")
     print("="*70 + "\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
