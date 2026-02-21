@@ -13,6 +13,7 @@ from helpers.value_calculator import calculate_value_increase, fetch_property_co
 from helpers.roi_calculator import calculate_roi
 from helpers.feasibility_calculator import calculate_feasibility
 from helpers.summary_generator import generate_summary
+from helpers.epcClient import epc_client
 
 load_dotenv()
 
@@ -37,10 +38,6 @@ ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
 async def analyze_by_address(request: AddressAnalysisRequest):
-    """
-    Full property analysis by address/postcode.
-    Handles geocoding, fetching property context, planning applications, cost, ROI, and summary.
-    """
     try:
         # --- Step 1: Geocode address ---
         headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
@@ -57,8 +54,10 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         longitude = float(geo_data[0]["lon"])
         display_name = geo_data[0]["display_name"]
 
-        # --- Step 2: Fetch property context (EPC, Land Registry) ---
-        current_epc, property_value = await fetch_property_context(postcode=request.address_query)
+        # --- Step 2: Fetch property context (EPC Metrics) ---
+        # This replaces the hardcoded Step 2 with the real EPC Client call
+        property_metrics = await epc_client.get_property_metrics(request.address_query)
+        current_epc = property_metrics.get("energy_rating", "D")
 
         # --- Step 3: Fetch local planning applications via IBex ---
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -70,41 +69,43 @@ async def analyze_by_address(request: AddressAnalysisRequest):
 
         for improvement_type in request.desired_improvements:
             matching = filter_by_improvement_type(applications, improvement_type)
-            approved_count = len(matching)
             avg_time = calculate_average_approval_time(matching)
             examples = extract_examples(matching, limit=5)
 
-            estimated_cost, cost_explanation = calculate_cost(improvement_type, matching)
+            # Use the real metrics for property-specific cost scaling
+            estimated_cost, cost_explanation = calculate_cost(
+                improvement_type=improvement_type, 
+                matching_applications=matching,
+                property_metrics=property_metrics
+            )
 
             value_increase, value_explanation = calculate_value_increase(
                 improvement_type=improvement_type,
                 estimated_cost=estimated_cost,
                 current_epc=current_epc,
-                property_value=property_value
+                property_value=None # Can be extended with Land Registry API
             )
 
             roi = calculate_roi(estimated_cost, value_increase)
-            feasibility = calculate_feasibility(approved_count)
+            feasibility = calculate_feasibility(len(matching))
 
             improvements_analysis.append(ImprovementAnalysis(
                 improvement_type=improvement_type,
                 feasibility=feasibility,
-                approved_examples=approved_count,
+                approved_examples=len(matching),
                 average_time_days=avg_time,
                 estimated_cost=estimated_cost,
                 estimated_roi_percent=roi,
                 green_premium_value=value_increase,
-                value_explanation=value_explanation,
                 examples=examples
             ))
 
             total_cost += estimated_cost
             total_value_increase += value_increase
 
-        # --- Step 5: Calculate total ROI & budget feasibility ---
+        # --- Step 5: Final ROI & Budget Calculation ---
         total_roi = calculate_roi(total_cost, total_value_increase)
         within_budget, _ = check_budget(total_cost, request.budget)
-        high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
 
         summary = generate_summary(
             postcode=request.address_query,
@@ -113,7 +114,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             total_value_increase=total_value_increase,
             total_roi=total_roi,
             budget=request.budget,
-            high_feasibility_count=high_feasibility_count,
+            high_feasibility_count=sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH"),
             within_budget=within_budget
         )
 
