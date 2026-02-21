@@ -133,11 +133,12 @@ function displayResults(data) {
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">ROI</div>
-                    <div class="detail-value">${improvement.estimated_roi_percent}%</div>
+                    <div class="detail-value">${improvement.estimated_roi_percent.toFixed(1)}%</div>
                 </div>
-                <div class="detail-item">
+                <div class="detail-item highlight-box">
                     <div class="detail-label">Value Increase</div>
                     <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
+                    ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
                 </div>
                 <div class="detail-item">
                     <div class="detail-label">Approved Examples</div>

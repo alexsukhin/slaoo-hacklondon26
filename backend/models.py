@@ -29,8 +29,8 @@ class ImprovementAnalysis(BaseModel):
     estimated_cost: float
     estimated_roi_percent: float
     green_premium_value: float
+    value_explanation: Optional[str] = None 
     examples: List[RetrofitExample]
-
 
 class PropertyAnalysisResponse(BaseModel):
     property_reference: str

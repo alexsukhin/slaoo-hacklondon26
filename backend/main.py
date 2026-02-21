@@ -12,7 +12,10 @@ from helpers.ibex_service import fetch_planning_applications
 from helpers.application_filter import filter_by_improvement_type
 from helpers.timeline_calculator import calculate_average_approval_time, extract_examples
 from helpers.cost_calculator import calculate_cost, check_budget
-from helpers.value_calculator import calculate_value_increase
+
+# Updated imports to include our new functions
+from helpers.value_calculator import calculate_value_increase, fetch_property_context
+
 from helpers.roi_calculator import calculate_roi
 from helpers.feasibility_calculator import calculate_feasibility
 from helpers.summary_generator import generate_summary
@@ -54,21 +57,31 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 
-@app.post("/api/analyze")
+@app.post("/api/analyze", response_model=PropertyAnalysisResponse)
 async def analyze_property(request: PropertyAnalysisRequest):
     print(f"\n{'='*70}")
-    print(f"Analyzing: {request.postcode} | Budget: £{request.budget:,.2f}")
+    print(f"Analyzing Reference/Postcode: {request.property_reference} | Budget: £{request.budget:,.2f}")
     print(f"Improvements: {', '.join(request.desired_improvements)}")
     print(f"{'='*70}\n")
     
     try:
-        # TODO: Get current EPC rating for property
-        coords = await geocode_postcode(request.postcode)
-        if not coords:
-            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.postcode}")
-        latitude, longitude = coords
+        # Treat the property_reference as a Postcode for the free tier APIs we are using
+        postcode = request.property_reference
         
-        # TODO: Check Article 4 / conservation area restrictions
+        # 1. Handle Location Data
+        if request.latitude and request.longitude:
+            latitude, longitude = request.latitude, request.longitude
+            print(f"✓ Using provided coordinates ({latitude}, {longitude})")
+        else:
+            coords = await geocode_postcode(postcode)
+            if not coords:
+                raise HTTPException(status_code=400, detail=f"Invalid postcode or unable to geocode: {postcode}")
+            latitude, longitude = coords
+
+        # 2. Fetch actual property data (EPC rating and Land Registry Price Paid)
+        current_epc, property_value = await fetch_property_context(postcode=postcode)
+        
+        # 3. Check local planning applications via IBex
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
         
         improvements_analysis = []
@@ -78,21 +91,20 @@ async def analyze_property(request: PropertyAnalysisRequest):
         for improvement_type in request.desired_improvements:
             print(f"\nAnalyzing: {improvement_type.upper()}")
             
-            # TODO: Improve search beyond string matching
             matching = filter_by_improvement_type(applications, improvement_type)
             approved_count = len(matching)
             
             avg_time = calculate_average_approval_time(matching)
             examples = extract_examples(matching, limit=5)
             
-            # TODO: Use real cost data from similar properties
             estimated_cost, cost_explanation = calculate_cost(improvement_type, matching)
             
-            # TODO: Join EPC + Price Paid datasets for accurate green premium
+            # 4. Use real Land Registry & EPC Data for Valuation
             value_increase, value_explanation = calculate_value_increase(
-                improvement_type, 
-                estimated_cost,
-                property_value=None  # TODO: Get from Land Registry
+                improvement_type=improvement_type, 
+                estimated_cost=estimated_cost,
+                current_epc=current_epc,
+                property_value=property_value
             )
             
             roi = calculate_roi(estimated_cost, value_increase)
@@ -108,6 +120,7 @@ async def analyze_property(request: PropertyAnalysisRequest):
                 estimated_cost=estimated_cost,
                 estimated_roi_percent=roi,
                 green_premium_value=value_increase,
+                value_explanation=value_explanation,  # Passing the new explanation to the frontend!
                 examples=examples
             ))
             
@@ -118,9 +131,8 @@ async def analyze_property(request: PropertyAnalysisRequest):
         within_budget, budget_text = check_budget(total_cost, request.budget)
         high_feasibility_count = sum(1 for imp in improvements_analysis if imp.feasibility == "HIGH")
         
-        # TODO: Use LLM (Gemini) to generate intelligent summary
         summary = generate_summary(
-            postcode=request.postcode,
+            postcode=postcode,
             num_improvements=len(request.desired_improvements),
             total_cost=total_cost,
             total_value_increase=total_value_increase,
@@ -131,12 +143,12 @@ async def analyze_property(request: PropertyAnalysisRequest):
         )
         
         print(f"\n{'='*70}")
-        print(f"TOTAL: £{total_cost:,} cost | £{total_value_increase:,} value | {total_roi:.1f}% ROI")
+        print(f"TOTAL: £{total_cost:,} cost | £{total_value_increase:,.2f} value | {total_roi:.1f}% ROI")
         print(f"{budget_text}")
         print(f"{'='*70}\n")
         
         return PropertyAnalysisResponse(
-            postcode=request.postcode,
+            property_reference=request.property_reference,
             location={"latitude": latitude, "longitude": longitude},
             budget=request.budget,
             improvements=improvements_analysis,
