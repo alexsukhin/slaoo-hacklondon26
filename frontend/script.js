@@ -10,8 +10,6 @@ form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const propertyReference = document.getElementById('propertyReference').value;
-    const latitude = document.getElementById('latitude').value;
-    const longitude = document.getElementById('longitude').value;
     const budget = parseFloat(document.getElementById('budget').value);
     
     const improvementCheckboxes = document.querySelectorAll('input[name="improvements"]:checked');
@@ -27,9 +25,6 @@ form.addEventListener('submit', async (e) => {
         budget: budget,
         desired_improvements: desiredImprovements
     };
-    
-    if (latitude) requestData.latitude = parseFloat(latitude);
-    if (longitude) requestData.longitude = parseFloat(longitude);
     
     await analyzeProperty(requestData);
 });
