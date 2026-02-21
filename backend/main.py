@@ -91,8 +91,10 @@ async def analyze_by_address(request: AddressAnalysisRequest):
 
         projected_epc = epc_per_improvement[best_improvement]
 
+        # Compliance status
         compliance_status = "ON TRACK" if EPC_BAND_TO_NUMERIC[projected_epc] <= EPC_BAND_TO_NUMERIC["C"] else "OFF TRACK"
-        
+
+        # Optional: suggest remaining improvements not selected
         suggestions = []
         if compliance_status != "ON TRACK":
             for imp in ["insulation", "heat_pump", "solar", "windows"]:
@@ -178,8 +180,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 current_epc=current_epc,
                 projected_epc=projected_epc,
                 compliance_status=compliance_status,
-                suggested_improvements=suggestions,
-                best_improvement=best_improvement
+                suggested_improvements=suggestions
             )
         )
 

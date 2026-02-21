@@ -59,20 +59,16 @@ class EPCClient:
         self, current_band: str, improvements: list[str]
     ) -> str:
         """
-        Estimate EPC band after improvements.
-        improvements: list of "solar", "insulation", "windows", "heat_pump"
+        Estimate EPC band cumulatively for multiple improvements.
+        Each improvement adds its effect rather than just taking the best.
         """
         numeric = EPC_BAND_TO_NUMERIC.get(current_band.upper(), 4)  # default D
-        # Define rough improvement scores (smaller numeric = better band)
+
         for imp in improvements:
-            if imp == "insulation":
-                numeric -= 1
-            elif imp == "solar":
-                numeric -= 0.5
-            elif imp == "windows":
-                numeric -= 0.5
-            elif imp == "heat_pump":
-                numeric -= 1
+            numeric += self.improvement_scores.get(imp, 0)  # add delta
+
+        # Clamp and round
         numeric = max(1, min(7, numeric))
         numeric = round(numeric)
+
         return NUMERIC_TO_EPC_BAND[numeric]
