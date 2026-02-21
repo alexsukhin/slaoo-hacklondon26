@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import re
 from dotenv import load_dotenv
 import httpx
 from models import PropertyAnalysisResponse, ImprovementAnalysis, AddressAnalysisRequest, EnergyCompliance
@@ -57,14 +58,20 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         latitude = float(geo_data[0]["lat"])
         longitude = float(geo_data[0]["lon"])
         display_name = geo_data[0]["display_name"]
+        
+        # --- Step 1.5: Extract Postcode ---
+        # We moved this UP so the EPC client can use it!
+        postcode_match = re.search(r'[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}', request.address_query.upper())
+        extracted_postcode = postcode_match.group(0) if postcode_match else request.address_query
 
         # --- Step 2: Fetch property context (EPC Metrics) ---
-        property_metrics = await epc_client.get_property_metrics(request.address_query)
+        # Pass both the raw address AND the clean postcode
+        property_metrics = await epc_client.get_property_metrics(request.address_query, extracted_postcode)
 
         current_epc = property_metrics.get("current_energy_rating", "D")
 
         epc_per_improvement = {}
-
+        
         for imp in request.desired_improvements:
             projected = epc_client.estimate_epc_after_improvements(
                 current_band=current_epc,
@@ -91,8 +98,12 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             for imp in ["insulation", "heat_pump", "solar", "windows"]:
                 if imp not in request.desired_improvements:
                     suggestions.append(imp.capitalize())
-        # --- Step 2: Fetch property context (EPC, Land Registry) ---
-        current_epc, property_value, recommendations = await fetch_property_context(postcode=request.address_query)
+        
+        # --- Step 2.5: Fetch Value Context ---
+        current_epc, property_value, recommendations = await fetch_property_context(
+            address=request.address_query, 
+            postcode=extracted_postcode
+        )
 
         # --- Step 3: Fetch local planning applications via IBex ---
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -107,14 +118,12 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             avg_time = calculate_average_approval_time(matching)
             examples = extract_examples(matching, limit=5)
 
-            # REVERTED to match your current cost_calculator.py signature
             estimated_cost, cost_explanation = calculate_cost(
                 improvement_type=improvement_type, 
                 matching_applications=matching,
                 property_metrics=property_metrics
             )
 
-            # FIXED: Removed duplicate argument and added missing comma
             value_increase, value_explanation = calculate_value_increase(
                 improvement_type=improvement_type,
                 estimated_cost=estimated_cost,
@@ -146,7 +155,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         within_budget, _ = check_budget(total_cost, request.budget)
 
         summary = generate_summary(
-            postcode=request.address_query,
+            postcode=extracted_postcode,
             num_improvements=len(request.desired_improvements),
             total_cost=total_cost,
             total_value_increase=total_value_increase,

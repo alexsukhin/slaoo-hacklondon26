@@ -1,5 +1,6 @@
 import httpx
 import os
+import re
 import base64
 from typing import Optional, Tuple, List, Dict, Any
 
@@ -45,24 +46,30 @@ async def fetch_district_average_price(postcode: str) -> Optional[float]:
         
     return 285000.0 # Ultimate fallback: UK National Average
 
-async def fetch_land_registry_price(postcode: str) -> Optional[float]:
-    """Queries the live HM Land Registry SPARQL API for recent sales in a postcode."""
+async def fetch_land_registry_price(address: str, postcode: str) -> Optional[float]:
+    """Queries HM Land Registry for recent sales, attempting to find the specific house."""
     clean_postcode = postcode.strip().upper()
     if " " not in clean_postcode and len(clean_postcode) > 3:
         clean_postcode = f"{clean_postcode[:-3]} {clean_postcode[-3:]}"
         
+    match = re.search(r'\b(\d+[A-Za-z]?)\b', address)
+    house_num = match.group(1).upper() if match else None
+
+    # Fetch top 100 recent sales in the postcode
     query = f"""
     PREFIX lrppi: <http://landregistry.data.gov.uk/def/ppi/>
     PREFIX lrcommon: <http://landregistry.data.gov.uk/def/common/>
-    SELECT ?amount
+    SELECT ?amount ?paon ?saon ?date
     WHERE {{
       ?transx lrppi:pricePaid ?amount ;
               lrppi:transactionDate ?date ;
               lrppi:propertyAddress ?addr .
       ?addr lrcommon:postcode "{clean_postcode}" .
+      OPTIONAL {{ ?addr lrcommon:paon ?paon . }}
+      OPTIONAL {{ ?addr lrcommon:saon ?saon . }}
     }}
     ORDER BY DESC(?date)
-    LIMIT 1
+    LIMIT 100
     """
     try:
         async with httpx.AsyncClient() as client:
@@ -74,11 +81,25 @@ async def fetch_land_registry_price(postcode: str) -> Optional[float]:
             if response.status_code == 200:
                 data = response.json()
                 results = data.get("results", {}).get("bindings", [])
+                
                 if results:
-                    price = float(results[0]["amount"]["value"])
-                    print(f"[Land Registry API] Found recent sale: £{price:,.2f} for {clean_postcode}")
-                    return price
-            print(f"[Land Registry API] No sales found for {clean_postcode}")
+                    # 1. Try to find the exact house number (PAON or SAON)
+                    if house_num:
+                        for r in results:
+                            paon = r.get("paon", {}).get("value", "").upper()
+                            saon = r.get("saon", {}).get("value", "").upper()
+                            if house_num == paon or house_num == saon:
+                                price = float(r["amount"]["value"])
+                                print(f"[Land Registry API] Found exact sale for '{house_num}' at {clean_postcode}: £{price:,.2f}")
+                                return price
+                    
+                    # 2. If exact match not found, compute average of recent sales in the postcode 
+                    # (Much more accurate than picking a random neighbor's sale)
+                    prices = [float(r["amount"]["value"]) for r in results]
+                    avg_price = sum(prices) / len(prices)
+                    print(f"[Land Registry API] Exact property not found. Using recent average for {clean_postcode}: £{avg_price:,.2f}")
+                    return avg_price
+                    
     except Exception as e:
         print(f"[Land Registry API] Error fetching data: {e}")
     return None
@@ -97,12 +118,13 @@ async def fetch_epc_recommendations(lmk_key: str, headers: dict) -> List[Dict[st
         print(f"[EPC API] Error fetching recommendations: {e}")
     return []
 
-async def fetch_property_context(postcode: str) -> Tuple[str, float, List[Dict[str, Any]]]:
-    """Fetches real EPC rating, property value, and property-specific recommendations."""
+# Update the function signature to accept both address and postcode
+async def fetch_property_context(address: str, postcode: str) -> Tuple[str, float, List[Dict[str, Any]]]:
     current_epc = 'D' # Default baseline
     recommendations = []
     
-    property_value = await fetch_land_registry_price(postcode)
+    # Land registry now uses both address and postcode to find the exact property
+    property_value = await fetch_land_registry_price(address, postcode)
     if not property_value:
         property_value = await fetch_district_average_price(postcode)
     
@@ -113,24 +135,41 @@ async def fetch_property_context(postcode: str) -> Tuple[str, float, List[Dict[s
             "Authorization": f"Basic {encoded_key}",
             "Accept": "application/json"
         }
+        
+        match = re.search(r'\b(\d+[A-Za-z]?)\b', address)
+        house_num = match.group(1).upper() if match else None
+
         try:
-            clean_postcode = postcode.replace(" ", "").upper()
             async with httpx.AsyncClient() as client:
+                # Query EPC by Postcode instead of full address string
                 response = await client.get(
-                    f"https://epc.opendatacommunities.org/api/v1/domestic/search?postcode={clean_postcode}",
+                    "https://epc.opendatacommunities.org/api/v1/domestic/search",
+                    params={"postcode": postcode, "size": 100},
                     headers=headers
                 )
                 if response.status_code == 200:
                     rows = response.json().get('rows', [])
-                    if rows:
-                        current_epc = rows[0].get('current-energy-rating', 'D').upper()
-                        print(f"[EPC API] Found rating {current_epc} for {postcode}")
+                    best_match = None
+                    
+                    if house_num and rows:
+                        for row in rows:
+                            addr1 = row.get("address1", "").upper()
+                            addr_full = row.get("address", "").upper()
+                            # Check if the primary address line starts with the house number
+                            if addr1.startswith(house_num) or f" {house_num} " in f" {addr_full} ":
+                                best_match = row
+                                break
+
+                    if best_match:
+                        current_epc = best_match.get('current-energy-rating', 'D').upper()
+                        print(f"[EPC API] Found exact rating {current_epc} for {address}")
                         
-                        # NEW: Fetch the actual recommendations for this property
-                        lmk_key = rows[0].get('lmk-key')
+                        lmk_key = best_match.get('lmk-key')
                         if lmk_key:
                             recommendations = await fetch_epc_recommendations(lmk_key, headers)
                             print(f"[EPC API] Found {len(recommendations)} official recommendations")
+                    else:
+                        print(f"[EPC API] Could not find exact house '{house_num}' in {postcode}. Defaulting to D.")
         except Exception as e:
             print(f"[EPC API] Error: {e}")
 
