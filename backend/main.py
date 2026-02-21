@@ -38,34 +38,69 @@ IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Proptech ROI Analysis API",
-        "endpoints": {
-            "GET /health": "Health check",
-            "POST /api/analyze": "Analyze property retrofit feasibility, ROI, timeline"
-        }
-    }
+@app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
+async def analyze_by_address(address_query: str):
+    try:
+        # 1. Use IBex to resolve the address. 
+        # (Internal fallback to postcode is already handled in ibex_client.py)
+        target_property = await ibex_client.search_by_address(address_query)
+        
+        if not target_property or "geometry" not in target_property:
+            raise HTTPException(status_code=404, detail="Address not found in IBex records.")
 
+        # 2. Robust Coordinate Extraction [Fix 1]
+        geom = target_property["geometry"]
+        geom_type = geom.get("type")
+        
+        if geom_type == "Point":
+            lng, lat = geom["coordinates"]
+        elif geom_type == "Polygon":
+            # Safely extract the first point of the exterior ring
+            try:
+                lng, lat = geom["coordinates"][0][0]
+            except (IndexError, TypeError):
+                # Fallback: check if the object has a pre-calculated centre_point extension
+                if target_property.get("centre_point"):
+                    lng = target_property["centre_point"].get("lon")
+                    lat = target_property["centre_point"].get("lat")
+                else:
+                    raise HTTPException(status_code=400, detail="Invalid Polygon structure.")
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported spatial format: {geom_type}")
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+        # 3. Perform analysis using the resolved coordinates
+        applications = await ibex_client.search_by_location(
+            latitude=lat,
+            longitude=lng,
+            radius=50, 
+            date_from=(date.today() - timedelta(days=3650)).isoformat()
+        )
+        
+        recommendations = []
+        if isinstance(applications, list) and len(applications) > 0:
+            recommendations.append(f"Found {len(applications)} historical records for this property.")
+            
+        return PropertyAnalysisResponse(
+            property_reference=target_property.get("uprn") or target_property.get("planning_reference"),
+            planning_applications=applications if isinstance(applications, list) else [],
+            recommendations=recommendations
+        )
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/analyze")
 async def analyze_property(request: PropertyAnalysisRequest):
     print(f"\n{'='*70}")
-    print(f"Analyzing: {request.postcode} | Budget: £{request.budget:,.2f}")
+    print(f"Analyzing: {request.property_reference} | Budget: £{request.budget:,.2f}")
     print(f"Improvements: {', '.join(request.desired_improvements)}")
     print(f"{'='*70}\n")
     
     try:
         # TODO: Get current EPC rating for property
-        coords = await geocode_postcode(request.postcode)
+        coords = await geocode_postcode(request.property_reference)
         if not coords:
-            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.postcode}")
+            raise HTTPException(status_code=400, detail=f"Invalid postcode: {request.property_reference}")
         latitude, longitude = coords
         
         # TODO: Check Article 4 / conservation area restrictions
@@ -120,7 +155,7 @@ async def analyze_property(request: PropertyAnalysisRequest):
         
         # TODO: Use LLM (Gemini) to generate intelligent summary
         summary = generate_summary(
-            postcode=request.postcode,
+            postcode=request.property_reference,
             num_improvements=len(request.desired_improvements),
             total_cost=total_cost,
             total_value_increase=total_value_increase,
@@ -136,7 +171,7 @@ async def analyze_property(request: PropertyAnalysisRequest):
         print(f"{'='*70}\n")
         
         return PropertyAnalysisResponse(
-            postcode=request.postcode,
+            property_reference=request.property_reference,
             location={"latitude": latitude, "longitude": longitude},
             budget=request.budget,
             improvements=improvements_analysis,
