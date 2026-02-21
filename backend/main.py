@@ -58,7 +58,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         display_name = geo_data[0]["display_name"]
 
         # --- Step 2: Fetch property context (EPC, Land Registry) ---
-        current_epc, property_value = await fetch_property_context(postcode=request.address_query)
+        current_epc, property_value, recommendations = await fetch_property_context(postcode=request.address_query)
 
         # --- Step 3: Fetch local planning applications via IBex ---
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -80,7 +80,8 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 improvement_type=improvement_type,
                 estimated_cost=estimated_cost,
                 current_epc=current_epc,
-                property_value=property_value
+                property_value=property_value,
+                recommendations=recommendations # NEW LINE ADDED HERE
             )
 
             roi = calculate_roi(estimated_cost, value_increase)
