@@ -63,26 +63,22 @@ async def analyze_by_address(request: AddressAnalysisRequest):
 
         current_epc = property_metrics.get("current_energy_rating", "D")
 
-        epc_per_improvement = {}
+        # Cumulative EPC for all desired improvements
+        projected_epc = epc_client.estimate_epc_after_improvements(
+            current_band=current_epc,
+            improvements=request.desired_improvements  # all selected improvements together
+        )
 
-        for imp in request.desired_improvements:
-            projected = epc_client.estimate_epc_after_improvements(
-                current_band=current_epc,
-                improvements=[imp]
-            )
-            epc_per_improvement[imp] = projected
+        # Compliance status
+        compliance_status = "ON TRACK" if EPC_BAND_TO_NUMERIC[projected_epc] <= EPC_BAND_TO_NUMERIC["C"] else "OFF TRACK"
 
-        best_improvement = None
-        best_band_value = 999
+        # Optional: suggest remaining improvements not selected
+        suggestions = []
+        if compliance_status != "ON TRACK":
+            for imp in ["insulation", "heat_pump", "solar", "windows"]:
+                if imp not in request.desired_improvements:
+                    suggestions.append(imp.capitalize())
 
-        for imp, band in epc_per_improvement.items():
-            band_value = EPC_BAND_TO_NUMERIC[band]
-
-            if band_value < best_band_value:
-                best_band_value = band_value
-                best_improvement = imp
-
-        projected_epc = epc_per_improvement[best_improvement]
 
         compliance_status = "ON TRACK" if EPC_BAND_TO_NUMERIC[projected_epc] <= EPC_BAND_TO_NUMERIC["C"] else "OFF TRACK"
         
@@ -169,8 +165,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 current_epc=current_epc,
                 projected_epc=projected_epc,
                 compliance_status=compliance_status,
-                suggested_improvements=suggestions,
-                best_improvement=best_improvement
+                suggested_improvements=suggestions
             )
         )
 

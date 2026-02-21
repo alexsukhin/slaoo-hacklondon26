@@ -20,7 +20,6 @@ class EnergyCompliance(BaseModel):
     projected_epc: str
     compliance_status: str
     suggested_improvements: Optional[List[str]] = []
-    best_improvement: Optional[str]
 
 class RetrofitExample(BaseModel):
     planning_reference: str

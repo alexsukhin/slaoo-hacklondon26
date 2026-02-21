@@ -11,6 +11,15 @@ class EPCClient:
         self.api_key = os.getenv("EPC_API_KEY")
         self.base_url = "https://epc.opendatacommunities.org/api/v1/domestic/search"
 
+        # Define per-improvement impact as numeric deltas
+        # Negative numbers improve EPC (lower numeric = better band)
+        self.improvement_scores = {
+            "insulation": -1.0,
+            "heat_pump": -1.0,
+            "solar": -0.5,
+            "windows": -0.5
+        }
+
     async def get_property_metrics(self, address: str) -> Dict[str, Any]:
         """Fetches floor area and current efficiency from real EPC records."""
         headers = {
@@ -34,28 +43,24 @@ class EPCClient:
                         }
         except Exception as e:
             print(f"EPC API Error: {e}")
-        
-        # Fallback to national averages if API fails
+
+        # Fallback to national averages
         return {"floor_area": 90.0, "current_energy_rating": "D", "property_type": "House"}
-    
+
     def estimate_epc_after_improvements(
         self, current_band: str, improvements: list[str]
     ) -> str:
         """
-        Estimate EPC band after improvements.
-        improvements: list of "solar", "insulation", "windows", "heat_pump"
+        Estimate EPC band cumulatively for multiple improvements.
+        Each improvement adds its effect rather than just taking the best.
         """
         numeric = EPC_BAND_TO_NUMERIC.get(current_band.upper(), 4)  # default D
-        # Define rough improvement scores (smaller numeric = better band)
+
         for imp in improvements:
-            if imp == "insulation":
-                numeric -= 1
-            elif imp == "solar":
-                numeric -= 0.5
-            elif imp == "windows":
-                numeric -= 0.5
-            elif imp == "heat_pump":
-                numeric -= 1
+            numeric += self.improvement_scores.get(imp, 0)  # add delta
+
+        # Clamp and round
         numeric = max(1, min(7, numeric))
         numeric = round(numeric)
+
         return NUMERIC_TO_EPC_BAND[numeric]
