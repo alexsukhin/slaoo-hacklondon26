@@ -1,41 +1,43 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import date
 
 
-class PropertySearchRequest(BaseModel):
-    uprn: Optional[str] = None
-    address: Optional[str] = None
+class PropertyAnalysisRequest(BaseModel):
+    property_reference: str = Field(description="UPRN or property reference")
+    budget: float = Field(description="Budget in GBP")
+    desired_improvements: List[str] = Field(
+        description="solar, insulation, windows, heat_pump"
+    )
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    radius: Optional[int] = Field(default=300, description="Search radius in meters")
 
 
-class PlanningApplicationFilter(BaseModel):
-    date_from: Optional[date] = None
-    date_to: Optional[date] = None
-    application_types: Optional[List[str]] = None
-    decisions: Optional[List[str]] = None
+class RetrofitExample(BaseModel):
+    planning_reference: str
+    proposal: str
+    decision: str
+    decision_time_days: Optional[int]
+    application_date: str
+    decided_date: Optional[str]
 
 
-class AreaAnalysisRequest(BaseModel):
-    latitude: float
-    longitude: float
-    radius: int = Field(default=500, ge=50, le=2000)
-    date_from: Optional[date] = None
-    date_to: Optional[date] = None
-
-
-class RetrofitAnalysisRequest(BaseModel):
-    latitude: float
-    longitude: float
+class ImprovementAnalysis(BaseModel):
     improvement_type: str
-    radius: int = Field(default=300, ge=50, le=1000)
+    feasibility: str
+    approved_examples: int
+    average_time_days: Optional[float]
+    estimated_cost: float
+    estimated_roi_percent: float
+    green_premium_value: float
+    examples: List[RetrofitExample]
 
 
 class PropertyAnalysisResponse(BaseModel):
-    property_reference: Optional[str] = None
-    planning_applications: List[Dict[str, Any]] = []
-    nearby_retrofits: List[Dict[str, Any]] = []
-    area_statistics: Optional[Dict[str, Any]] = None
-    recommendations: List[str] = []
+    property_reference: str
+    location: Dict[str, float]
+    budget: float
+    improvements: List[ImprovementAnalysis]
+    total_cost: float
+    total_roi_percent: float
+    total_value_increase: float
+    summary: str
