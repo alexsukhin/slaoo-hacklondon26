@@ -6,6 +6,7 @@ const errorState = document.getElementById('errorState');
 const resultsContainer = document.getElementById('resultsContainer');
 const submitBtn = document.getElementById('submitBtn');
 
+
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -70,7 +71,7 @@ async function analyzeProperty(data) {
 
 function displayResults(data) {
     hideAll();
-    
+
     // Summary section
     const summarySection = document.getElementById('summarySection');
     summarySection.innerHTML = `<p><strong>Summary:</strong> ${data.summary}</p>`;
@@ -190,10 +191,62 @@ function displayResults(data) {
     // Append the nav and content to the DOM
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
+
+// ================================
+// Energy Compliance Section
+// ================================
+
+    if (data.energy_compliance) {
+        // Remove old compliance section if it exists
+        const oldCompliance = document.getElementById('energyComplianceSection');
+        if (oldCompliance) oldCompliance.remove();
+
+        const compliance = data.energy_compliance;
+
+        const complianceSection = document.createElement('div');
+        complianceSection.id = 'energyComplianceSection';
+        complianceSection.className = 'card';
+        complianceSection.style.marginTop = '24px';
+
+        const statusColor = compliance.compliance_status === "ON TRACK"
+            ? "var(--status-high-text)"
+            : "var(--status-low-text)";
+
+        const suggestedHTML = compliance.suggested_improvements.length > 0
+            ? `<p><strong>Suggested Improvements:</strong> ${compliance.suggested_improvements.join(', ')}</p>`
+            : `<p><strong>No additional improvements needed.</strong></p>`;
+
+        complianceSection.innerHTML = `
+            <h3 style="margin-bottom:20px;">Energy Compliance (EPC 2030 Target)</h3>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value epc-${compliance.current_epc}">${compliance.current_epc}</div>
+                    <div class="stat-label">Current EPC</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">${compliance.projected_epc}</div>
+                    <div class="stat-label">Projected EPC</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" style="color:${statusColor}">
+                        ${compliance.compliance_status}
+                    </div>
+                    <div class="stat-label">2030 Compliance</div>
+                </div>
+            </div>
+
+            <div style="margin-top:20px;">
+                ${suggestedHTML}
+            </div>
+        `;
+        resultsContainer.appendChild(complianceSection);
+    }
     
     resultsContainer.style.display = 'block';
     resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
+
 function showError(message) {
     hideAll();
     errorState.style.display = 'block';

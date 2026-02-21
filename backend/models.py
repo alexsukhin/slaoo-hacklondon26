@@ -15,6 +15,13 @@ class PropertyAnalysisRequest(BaseModel):
     longitude: Optional[float] = None
 
 
+class EnergyCompliance(BaseModel):
+    current_epc: str
+    projected_epc: str
+    compliance_status: str
+    suggested_improvements: Optional[List[str]] = []
+    best_improvement: Optional[str]
+
 class RetrofitExample(BaseModel):
     planning_reference: str
     proposal: str
@@ -22,7 +29,6 @@ class RetrofitExample(BaseModel):
     decision_time_days: Optional[int]
     application_date: str
     decided_date: Optional[str]
-
 
 class ImprovementAnalysis(BaseModel):
     improvement_type: str
@@ -44,6 +50,7 @@ class PropertyAnalysisResponse(BaseModel):
     total_roi_percent: float
     total_value_increase: float
     summary: str
+    energy_compliance: EnergyCompliance
 
 class AddressAnalysisRequest(BaseModel):
     address_query: str

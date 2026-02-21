@@ -491,3 +491,11 @@ input[type="number"]:focus {
         gap: 10px;
     }
 }
+
+.epc-A { color: #008000; }
+.epc-B { color: #4CAF50; }
+.epc-C { color: #8BC34A; }
+.epc-D { color: #FFC107; }
+.epc-E { color: #FF9800; }
+.epc-F { color: #F44336; }
+.epc-G { color: #B71C1C; }

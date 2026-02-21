@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 import httpx
-from models import PropertyAnalysisResponse, ImprovementAnalysis, AddressAnalysisRequest
+from models import PropertyAnalysisResponse, ImprovementAnalysis, AddressAnalysisRequest, EnergyCompliance
 from ibex_client import IBexClient
 from helpers.ibex_service import fetch_planning_applications
 from helpers.application_filter import filter_by_improvement_type
@@ -13,7 +13,7 @@ from helpers.value_calculator import calculate_value_increase, fetch_property_co
 from helpers.roi_calculator import calculate_roi
 from helpers.feasibility_calculator import calculate_feasibility
 from helpers.summary_generator import generate_summary
-from helpers.epcClient import epc_client
+from helpers.epcClient import EPCClient
 
 load_dotenv()
 
@@ -33,8 +33,12 @@ app.add_middleware(
 
 IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
-ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 
+ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
+epc_client = EPCClient()
+
+EPC_BAND_TO_NUMERIC = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7}
+NUMERIC_TO_EPC_BAND = {v: k for k, v in EPC_BAND_TO_NUMERIC.items()}
 
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
 async def analyze_by_address(request: AddressAnalysisRequest):
@@ -55,9 +59,38 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         display_name = geo_data[0]["display_name"]
 
         # --- Step 2: Fetch property context (EPC Metrics) ---
-        # This replaces the hardcoded Step 2 with the real EPC Client call
         property_metrics = await epc_client.get_property_metrics(request.address_query)
-        current_epc = property_metrics.get("energy_rating", "D")
+
+        current_epc = property_metrics.get("current_energy_rating", "D")
+
+        epc_per_improvement = {}
+
+        for imp in request.desired_improvements:
+            projected = epc_client.estimate_epc_after_improvements(
+                current_band=current_epc,
+                improvements=[imp]
+            )
+            epc_per_improvement[imp] = projected
+
+        best_improvement = None
+        best_band_value = 999
+
+        for imp, band in epc_per_improvement.items():
+            band_value = EPC_BAND_TO_NUMERIC[band]
+
+            if band_value < best_band_value:
+                best_band_value = band_value
+                best_improvement = imp
+
+        projected_epc = epc_per_improvement[best_improvement]
+
+        compliance_status = "ON TRACK" if EPC_BAND_TO_NUMERIC[projected_epc] <= EPC_BAND_TO_NUMERIC["C"] else "OFF TRACK"
+        
+        suggestions = []
+        if compliance_status != "ON TRACK":
+            for imp in ["insulation", "heat_pump", "solar", "windows"]:
+                if imp not in request.desired_improvements:
+                    suggestions.append(imp.capitalize())
 
         # --- Step 3: Fetch local planning applications via IBex ---
         applications = await fetch_planning_applications(ibex_client, latitude, longitude)
@@ -126,7 +159,14 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             total_cost=total_cost,
             total_roi_percent=total_roi,
             total_value_increase=total_value_increase,
-            summary=summary
+            summary=summary,
+            energy_compliance=EnergyCompliance(
+                current_epc=current_epc,
+                projected_epc=projected_epc,
+                compliance_status=compliance_status,
+                suggested_improvements=suggestions,
+                best_improvement=best_improvement
+            )
         )
 
     except Exception as e:
