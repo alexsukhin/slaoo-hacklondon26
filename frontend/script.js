@@ -98,13 +98,30 @@ function displayResults(data) {
         </div>
     `;
     
-    // Improvements section
+    // Improvements section (Tabbed Interface)
     const improvementsSection = document.getElementById('improvementsSection');
     improvementsSection.innerHTML = '<h3 style="margin-bottom: 20px;">Improvement Analysis</h3>';
     
-    data.improvements.forEach(improvement => {
-        const improvementDiv = document.createElement('div');
-        improvementDiv.className = 'improvement-item';
+    // Create containers for the Tabs and the Content
+    const tabsNav = document.createElement('div');
+    tabsNav.className = 'tabs-nav';
+    
+    const tabsContent = document.createElement('div');
+    tabsContent.className = 'tabs-content';
+    
+    data.improvements.forEach((improvement, index) => {
+        const isFirst = index === 0;
+        const prettyName = improvement.improvement_type.replace('_', ' ');
+        
+        // 1. Create Tab Button
+        const tabBtn = document.createElement('button');
+        tabBtn.className = `tab-btn ${isFirst ? 'active' : ''}`;
+        tabBtn.textContent = prettyName;
+        tabsNav.appendChild(tabBtn);
+        
+        // 2. Create Tab Content
+        const tabPane = document.createElement('div');
+        tabPane.className = `tab-pane ${isFirst ? 'active' : ''}`;
         
         const examplesHTML = improvement.examples && improvement.examples.length > 0 
             ? `
@@ -122,46 +139,61 @@ function displayResults(data) {
             `
             : '<div class="examples-section"><p style="color: #999;">No recent examples found</p></div>';
         
-        improvementDiv.innerHTML = `
-            <div class="improvement-header">
-                <div class="improvement-title">${improvement.improvement_type.replace('_', ' ')}</div>
-                <div class="feasibility-badge feasibility-${improvement.feasibility}">
-                    ${improvement.feasibility} FEASIBILITY
+        tabPane.innerHTML = `
+            <div class="improvement-item">
+                <div class="improvement-header">
+                    <div class="improvement-title">${prettyName}</div>
+                    <div class="feasibility-badge feasibility-${improvement.feasibility}">
+                        ${improvement.feasibility} FEASIBILITY
+                    </div>
                 </div>
+                <div class="improvement-details">
+                    <div class="detail-item">
+                        <div class="detail-label">Estimated Cost</div>
+                        <div class="detail-value">£${improvement.estimated_cost.toLocaleString()}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">ROI</div>
+                        <div class="detail-value">${improvement.estimated_roi_percent.toFixed(1)}%</div>
+                    </div>
+                    <div class="detail-item highlight-box">
+                        <div class="detail-label">Value Increase</div>
+                        <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
+                        ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Approved Examples</div>
+                        <div class="detail-value">${improvement.approved_examples}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Avg. Approval Time</div>
+                        <div class="detail-value">${improvement.average_time_days ? Math.round(improvement.average_time_days) + ' days' : 'N/A'}</div>
+                    </div>
+                </div>
+                ${examplesHTML}
             </div>
-            <div class="improvement-details">
-                <div class="detail-item">
-                    <div class="detail-label">Estimated Cost</div>
-                    <div class="detail-value">£${improvement.estimated_cost.toLocaleString()}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">ROI</div>
-                    <div class="detail-value">${improvement.estimated_roi_percent.toFixed(1)}%</div>
-                </div>
-                <div class="detail-item highlight-box">
-                    <div class="detail-label">Value Increase</div>
-                    <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
-                    ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Approved Examples</div>
-                    <div class="detail-value">${improvement.approved_examples}</div>
-                </div>
-                <div class="detail-item">
-                    <div class="detail-label">Avg. Approval Time</div>
-                    <div class="detail-value">${improvement.average_time_days ? Math.round(improvement.average_time_days) + ' days' : 'N/A'}</div>
-                </div>
-            </div>
-            ${examplesHTML}
         `;
+        tabsContent.appendChild(tabPane);
         
-        improvementsSection.appendChild(improvementDiv);
+        // 3. Add Click Event to Switch Tabs
+        tabBtn.addEventListener('click', () => {
+            // Remove active class from all tabs and panes
+            Array.from(tabsNav.children).forEach(btn => btn.classList.remove('active'));
+            Array.from(tabsContent.children).forEach(pane => pane.classList.remove('active'));
+            
+            // Add active class to clicked tab and corresponding pane
+            tabBtn.classList.add('active');
+            tabPane.classList.add('active');
+        });
     });
+    
+    // Append the nav and content to the DOM
+    improvementsSection.appendChild(tabsNav);
+    improvementsSection.appendChild(tabsContent);
     
     resultsContainer.style.display = 'block';
     resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-
 function showError(message) {
     hideAll();
     errorState.style.display = 'block';
