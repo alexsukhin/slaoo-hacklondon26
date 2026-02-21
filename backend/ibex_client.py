@@ -4,14 +4,57 @@ import os
 from datetime import date
 
 
+
 class IBexClient:
-    def __init__(self, api_key: str, base_url: str = "https://ibex.seractech.co.uk"):
+    def __init__(self, api_key: str, base_url: str = "https://ibex.seractech.co.uk/"):
         self.api_key = api_key
         self.base_url = base_url
         self.headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
         }
+
+    async def search_by_address(self, address_query: str) -> Optional[Dict[str, Any]]:
+        search_terms = [address_query.strip()]
+        
+        # 2. Add fallback search term (Postcode only) if query has multiple words
+        words = address_query.strip().split()
+        if len(words) > 1:
+            # Assumes the postcode is at the end of the string
+            search_terms.append(" ".join(words[-2:])) 
+            
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for term in search_terms:
+                payload = {
+                    "input": {
+                        "page": 1,
+                        "page_size": 10,
+                        "date_range_type": "validated",
+                        "date_from": "2010-01-01",
+                        "date_to": date.today().isoformat()
+                    },
+                    "filters": {
+                        "keywords": [term] 
+                    },
+                    "extensions": {
+                        "centre_point": True,
+                        "geometry": True
+                    }
+                }
+            
+                response = await client.post(
+                    f"{self.base_url.rstrip('/')}/applications",
+                    headers=self.headers,
+                    json=payload
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if isinstance(data, list) and len(data) > 0:
+                        for match in data:
+                            if match.get("geometry"):
+                                return match
+        return None
     
     async def search_by_location(
         self,

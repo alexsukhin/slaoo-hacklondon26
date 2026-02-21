@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 from datetime import date, datetime, timedelta
 import os
+import httpx
 from dotenv import load_dotenv
 
 from models import (
@@ -56,50 +57,53 @@ async def health_check():
     print("[Health] Health check requested")
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
+# In backend/main.py
 
-@app.post("/api/property/analyze")
-async def analyze_property(request: PropertySearchRequest):
-    print(f"\n[Property Analysis] Starting analysis for: {request}")
-    
-    if not request.latitude or not request.longitude:
-        raise HTTPException(status_code=400, detail="Latitude and longitude required")
-    
+@app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
+async def analyze_by_address(address_query: str):
     try:
-        date_to = date.today().isoformat()
-        date_from = (date.today() - timedelta(days=730)).isoformat()
-        
+        # STEP 1: Geocode the address using OpenStreetMap (Nominatim)
+        # Nominatim requires a User-Agent header as per their policy
+        headers = {"User-Agent": "ProptechAnalysisApp/1.0"}
+        params = {
+            "q": address_query,
+            "format": "json",
+            "limit": 1,
+            "countrycodes": "gb" # Restrict to UK
+        }
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            geo_response = await client.get(
+                "https://nominatim.openstreetmap.org/search", 
+                params=params, 
+                headers=headers
+            )
+            geo_data = geo_response.json()
+
+        if not geo_data:
+            raise HTTPException(status_code=404, detail="Could not find coordinates for this address.")
+
+        lat = float(geo_data[0]["lat"])
+        lng = float(geo_data[0]["lon"])
+        display_name = geo_data[0]["display_name"]
+
+        # STEP 2: Use the resolved coordinates to search IBex
+        # Search for applications within 50m of this geocoded point
         applications = await ibex_client.search_by_location(
-            latitude=request.latitude,
-            longitude=request.longitude,
-            radius=request.radius,
-            date_from=date_from,
-            date_to=date_to
+            latitude=lat,
+            longitude=lng,
+            radius=50,
+            date_from=(date.today() - timedelta(days=3650)).isoformat()
         )
-        
-        print(f"[Property Analysis] Found {len(applications) if isinstance(applications, list) else 0} applications")
-        print(f"[Property Analysis] Sample data: {applications[:2] if isinstance(applications, list) and applications else 'No data'}")
-        
-        recommendations = []
-        if isinstance(applications, list):
-            approved_count = sum(1 for app in applications if app.get("normalised_decision") == "Approved")
-            if approved_count > 0:
-                recommendations.append(f"Found {approved_count} approved applications in area - planning permission likely favorable")
-            
-            home_improvements = [app for app in applications if app.get("project_type") == "home improvement"]
-            if home_improvements:
-                recommendations.append(f"Found {len(home_improvements)} similar home improvement projects nearby")
         
         return PropertyAnalysisResponse(
-            property_reference=request.uprn,
+            property_reference=None, # OSM doesn't provide UPRNs
             planning_applications=applications if isinstance(applications, list) else [],
-            nearby_retrofits=[],
-            recommendations=recommendations
+            recommendations=[f"Located at: {display_name}"]
         )
-    
-    except Exception as e:
-        print(f"[Property Analysis] Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/area/retrofits")
 async def find_area_retrofits(request: RetrofitAnalysisRequest):
@@ -245,6 +249,7 @@ async def get_council_statistics(
         raise HTTPException(status_code=500, detail=f"Failed to get council stats: {str(e)}")
 
 
+# takes long and lat as input 
 @app.post("/api/area/analysis")
 async def analyze_area(request: AreaAnalysisRequest):
     print(f"\n[Area Analysis] Analyzing area at ({request.latitude}, {request.longitude})")
