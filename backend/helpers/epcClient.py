@@ -17,7 +17,11 @@ class EPCClient:
             "insulation": -1,
             "heat_pump": -2,
             "solar": -1,
-            "windows": -1
+            "windows": -1,
+            "ev_charger": -0.5,
+            "battery": -0.3,
+            "cladding": -1,
+            "loft_conversion": -0.5
         }
 
         # Use proper Basic Auth encoding: email:api_key

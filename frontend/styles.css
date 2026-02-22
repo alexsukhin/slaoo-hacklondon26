@@ -136,8 +136,8 @@ input[type="number"]:focus {
 
 .checkbox-group {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(4, 1fr); /* 4 items per row → 2 rows for 8 items */
+    gap: 12px 16px; /* row gap / column gap */
 }
 
 .checkbox-label {

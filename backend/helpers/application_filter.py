@@ -3,12 +3,59 @@ import re
 from thefuzz import fuzz
 
 IMPROVEMENT_KEYWORDS = {
-    "solar": ["solar", "photovoltaic", "pv", "pv panel", "solar panel", "solar pv", "photovoltaics"],
-    "insulation": ["insulation", "wall insulation", "external wall", "cavity wall", "loft insulation", "roof insulation"],
-    "windows": ["window", "windows", "double glazing", "triple glazing", "glazing", "u-value", "energy efficient windows"],
-    "heat_pump": ["heat pump", "air source", "ground source", "ashp", "gshp", "air source heat pump", "ground source heat pump"]
+    "solar": [
+        "solar", "photovoltaic", "pv", "pv panel",
+        "solar panel", "solar pv", "photovoltaics"
+    ],
+
+    "insulation": [
+        "insulation", "wall insulation", "external wall",
+        "cavity wall", "loft insulation", "roof insulation"
+    ],
+
+    "windows": [
+        "window", "windows", "double glazing",
+        "triple glazing", "glazing", "u-value",
+        "energy efficient windows"
+    ],
+
+    "heat_pump": [
+        "heat pump", "air source", "ground source",
+        "ashp", "gshp",
+        "air source heat pump",
+        "ground source heat pump"
+    ],
+
+    "battery": [
+        "battery storage", "home battery",
+        "powerwall", "battery unit",
+        "energy storage system",
+        "tesla battery"
+    ],
+
+    "loft_conversion": [
+        "loft conversion", "roof extension",
+        "dormer", "mansard",
+        "roof enlargement", "attic conversion"
+    ],
+
+    "cladding": [
+        "external cladding", "render",
+        "external wall finish",
+        "facade upgrade", "wall rendering",
+        "external insulation system"
+    ],
+
+    "ev_charger": [
+        "electric vehicle charger",
+        "ev charger",
+        "charging point",
+        "vehicle charging",
+        "car charging point",
+        "ev installation"
+    ]
 }
-    
+
 def normalize_text(text: str) -> str:
     """
     Lowercase and remove punctuation for consistent matching.

@@ -73,47 +73,14 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
     
     if (mapInstances[containerId]) mapInstances[containerId].remove();
 
-    // Clear old map and legend cards if they exist
     const oldCard = document.getElementById(containerId + "Card");
     if (oldCard) oldCard.remove();
-    const oldLegend = document.getElementById(containerId + "LegendCard");
-    if (oldLegend) oldLegend.remove();
 
-    // Create Map Card
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
     mapCard.id = containerId + "Card";
     mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2><div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
     mapSection.appendChild(mapCard);
-
-    // --- NEW: Create Legend Card ---
-    const epcColors = {
-        A: '#1a9641',
-        B: '#4daf4a',
-        C: '#a6d96a',
-        D: '#ffffbf',
-        E: '#fdae61',
-        F: '#f46d43',
-        G: '#d73027'
-    };
-
-    const legendCard = document.createElement('div');
-    legendCard.className = 'card';
-    legendCard.id = containerId + "LegendCard";
-    legendCard.style.marginTop = '-10px'; // Visual tuck under the map
-    
-    let legendHTML = `<h3>EPC Rating Key</h3><div class="map-legend-grid">`;
-    Object.entries(epcColors).forEach(([band, color]) => {
-        legendHTML += `
-            <div class="map-legend-item">
-                <span class="legend-dot" style="background-color: ${color}"></span>
-                <span class="legend-label">Band ${band}</span>
-            </div>`;
-    });
-    legendHTML += `</div>`;
-    legendCard.innerHTML = legendHTML;
-    mapSection.appendChild(legendCard);
-    // --- END LEGEND ---
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
