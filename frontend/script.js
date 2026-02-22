@@ -164,19 +164,23 @@ function displayResults(data) {
     // Stats grid
     const statsGrid = document.getElementById('statsGrid');
     const withinBudget = data.total_cost <= data.budget;
+    const treesEquivalent = Math.round(data.total_co2_savings / 21);
     
     statsGrid.innerHTML = `
-        <div class="stat-card">
-            <div class="stat-value">£${data.total_cost.toLocaleString()}</div>
-            <div class="stat-label">Total Cost</div>
+        <div class="stat-card" style="border-color: var(--primary-green); background-color: var(--status-high-bg);">
+            <div class="stat-value" style="color: var(--primary-green);">🌱 ${data.total_co2_savings.toLocaleString()} kg</div>
+            <div class="stat-label">Annual CO₂ Reduction</div>
+            <div style="font-size: 0.8rem; margin-top: 8px; color: var(--text-muted);">
+                Equivalent to planting <strong>${treesEquivalent} trees</strong>
+            </div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">${data.total_roi_percent.toFixed(1)}%</div>
-            <div class="stat-label">Total ROI</div>
+            <div class="stat-value">£${data.total_cost.toLocaleString()}</div>
+            <div class="stat-label">Green Investment</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">£${data.total_value_increase.toLocaleString()}</div>
-            <div class="stat-label">Value Increase</div>
+            <div class="stat-label">Green Premium</div>
         </div>
         <div class="stat-card">
             <div class="stat-value">${withinBudget ? '✓ Yes' : '✗ No'}</div>
@@ -231,25 +235,21 @@ function displayResults(data) {
                 </div>
                 <div class="improvement-details">
                     <div class="detail-item">
-                        <div class="detail-label">Estimated Cost</div>
+                        <div class="detail-label">Green Investment</div>
                         <div class="detail-value">£${improvement.estimated_cost.toLocaleString()}</div>
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">ROI</div>
-                        <div class="detail-value">${improvement.estimated_roi_percent.toFixed(1)}%</div>
+                        <div class="detail-label">Energy Savings</div>
+                        <div class="detail-value">${improvement.kwh_savings.toLocaleString()} kWh/yr</div>
                     </div>
                     <div class="detail-item highlight-box">
-                        <div class="detail-label">Value Increase</div>
+                        <div class="detail-label">Green Premium</div>
                         <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
                         ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
                     </div>
                     <div class="detail-item">
-                        <div class="detail-label">Approved Examples</div>
-                        <div class="detail-value">${improvement.approved_examples}</div>
-                    </div>
-                    <div class="detail-item">
-                        <div class="detail-label">Avg. Approval Time</div>
-                        <div class="detail-value">${improvement.average_time_days ? Math.round(improvement.average_time_days) + ' days' : 'N/A'}</div>
+                        <div class="detail-label">CO₂ Reduction</div>
+                        <div class="detail-value">${improvement.co2_savings_kg.toLocaleString()} kg/yr</div>
                     </div>
                 </div>
                 ${examplesHTML}
@@ -269,15 +269,13 @@ function displayResults(data) {
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
 
-    // Map
-    const markers = [
-        {
-            lat: data.location.latitude,
-            lng: data.location.longitude,
-            label: `Current Property: ${data.property_reference}`,
-            color: '#e63946'
-        }
-    ];
+    // Map logic remains identical
+    const markers = [{
+        lat: data.location.latitude,
+        lng: data.location.longitude,
+        label: `Current Property: ${data.property_reference}`,
+        color: '#e63946'
+    }];
 
     data.improvements.forEach(imp => {
         imp.examples.forEach(example => {
@@ -294,17 +292,12 @@ function displayResults(data) {
 
     renderMap("propertyMap", data.location.latitude, data.location.longitude, markers);
 
-    // EPC Settings
+    // EPC Settings & Logic
     const EPC_SETTINGS = {
         colors: {
-            current: '#2b2d42',
-            predicted: '#8d99ae',
-            goal: '#edf2f4',
-            belowGoal: '#fbeaec',
-            belowGoalText: '#7a222b',
-            goalText: '#000',      
-            predictedText: '#fff',
-            currentText: '#fff',
+            current: '#2b2d42', predicted: '#8d99ae', goal: '#edf2f4',
+            belowGoal: '#fbeaec', belowGoalText: '#7a222b',
+            goalText: '#000', predictedText: '#fff', currentText: '#fff',
         },
         epcOrder: ["G","F","E","D","C","B","A"],
         goalBand: "C",
@@ -314,16 +307,14 @@ function displayResults(data) {
     if (data.energy_compliance) {
         const compliance = data.energy_compliance;
         const epcSection = document.getElementById('epcSection');
-        
-        // Clean out previous runs
         epcSection.innerHTML = '';
 
         const epcCard = document.createElement('div');
         epcCard.id = 'epcCard';
-        epcCard.className = 'card epc-card'; // Added .card class for styling
+        epcCard.className = 'card epc-card';
 
         const title = document.createElement('h2');
-        title.textContent = "Energy Compliance Target";
+        title.textContent = "Energy & Environmental Compliance";
         epcCard.appendChild(title);
 
         const mutedText = document.createElement('p');
@@ -363,7 +354,6 @@ function displayResults(data) {
                 segment.style.color = EPC_SETTINGS.colors.belowGoalText;
                 segment.title = band;
             }
-
             epcBar.appendChild(segment);    
         });
 
@@ -390,6 +380,23 @@ function displayResults(data) {
             span.appendChild(text);
             legend.appendChild(span);
         });
+        
+        // Inject Real Carbon Data if available
+        if (compliance.current_co2_emissions) {
+            const carbonData = document.createElement('div');
+            carbonData.style.marginTop = '25px';
+            carbonData.style.paddingTop = '20px';
+            carbonData.style.borderTop = '1px dashed var(--border-color)';
+            carbonData.innerHTML = `
+                <h4 style="margin-bottom: 12px; font-size: 1rem;">Current Property Footprint (EPC Data)</h4>
+                <div style="display: flex; gap: 20px;">
+                    <div><span style="color: var(--text-muted); font-size: 0.85rem;">Current Emissions:</span> <br><strong>${compliance.current_co2_emissions} tonnes/yr</strong></div>
+                    <div><span style="color: var(--text-muted); font-size: 0.85rem;">Potential Emissions:</span> <br><strong>${compliance.potential_co2_emissions} tonnes/yr</strong></div>
+                    ${compliance.current_energy_consumption ? `<div><span style="color: var(--text-muted); font-size: 0.85rem;">Energy Consumption:</span> <br><strong>${compliance.current_energy_consumption} kWh/m²/yr</strong></div>` : ''}
+                </div>
+            `;
+            epcCard.appendChild(carbonData);
+        }
 
         epcCard.appendChild(legend);
         epcSection.appendChild(epcCard);

@@ -21,17 +21,15 @@ class EPCClient:
 
     # Updated signature to accept postcode
     async def get_property_metrics(self, address: str, postcode: str) -> Dict[str, Any]:
-        """Fetches floor area and current efficiency from real EPC records."""
+        """Fetches floor area, efficiency, and environmental metrics from real EPC records."""
         headers = {
             "Authorization": f"Basic {self.api_key}",
             "Accept": "application/json"
         }
         
-        # Extract the house number (e.g. "31" or "29A")
         match = re.search(r'\b(\d+[A-Za-z]?)\b', address)
         house_num = match.group(1).upper() if match else None
 
-        # Query the API by postcode to get all properties on the street
         params = {"postcode": postcode, "size": 100}
 
         try:
@@ -45,7 +43,6 @@ class EPCClient:
                         for row in rows:
                             addr1 = row.get("address1", "").upper()
                             addr_full = row.get("address", "").upper()
-                            # Check if the exact house number is in the EPC address string
                             if addr1.startswith(house_num) or f" {house_num} " in f" {addr_full} ":
                                 best_match = row
                                 break
@@ -55,12 +52,22 @@ class EPCClient:
                             "floor_area": float(best_match.get("total-floor-area", 90)),
                             "current_energy_rating": best_match.get("current-energy-rating", "D"),
                             "property_type": best_match.get("property-type", "House"),
-                            "built_form": best_match.get("built-form", "Semi-Detached")
+                            "built_form": best_match.get("built-form", "Semi-Detached"),
+                            "co2_emissions_current": float(best_match.get("co2-emissions-current", 0)),
+                            "co2_emissions_potential": float(best_match.get("co2-emissions-potential", 0)),
+                            "energy_consumption_current": float(best_match.get("energy-consumption-current", 0))
                         }
         except Exception as e:
             print(f"EPC API Error: {e}")
         
-        return {"floor_area": 90.0, "current_energy_rating": "D", "property_type": "House"}
+        return {
+            "floor_area": 90.0, 
+            "current_energy_rating": "D", 
+            "property_type": "House",
+            "co2_emissions_current": None,
+            "co2_emissions_potential": None,
+            "energy_consumption_current": None
+        }
             
     def estimate_epc_after_improvements(
         self, current_band: str, improvements: list[str]

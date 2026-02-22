@@ -15,6 +15,7 @@ from helpers.roi_calculator import calculate_roi
 from helpers.feasibility_calculator import calculate_feasibility
 from helpers.summary_generator import generate_summary
 from helpers.epcClient import EPCClient
+from helpers.roi_calculator import calculate_roi, get_environmental_impact
 
 load_dotenv()
 
@@ -119,6 +120,8 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         improvements_analysis = []
         total_cost = 0
         total_value_increase = 0
+        total_co2 = 0
+        total_kwh = 0
 
         for improvement_type in request.desired_improvements:
             matching = filter_by_improvement_type(applications, improvement_type)
@@ -141,6 +144,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
 
             roi = calculate_roi(estimated_cost, value_increase)
             feasibility = calculate_feasibility(len(matching))
+            co2_kg, kwh = get_environmental_impact(improvement_type)
 
             improvements_analysis.append(ImprovementAnalysis(
                 improvement_type=improvement_type,
@@ -151,11 +155,15 @@ async def analyze_by_address(request: AddressAnalysisRequest):
                 estimated_roi_percent=roi,
                 green_premium_value=value_increase,
                 value_explanation=value_explanation, 
+                co2_savings_kg=co2_kg,
+                kwh_savings=kwh,
                 examples=examples
             ))
 
             total_cost += estimated_cost
             total_value_increase += value_increase
+            total_co2 += co2_kg
+            total_kwh += kwh
 
         # --- Step 5: Final ROI & Budget Calculation ---
         total_roi = calculate_roi(total_cost, total_value_increase)
@@ -180,12 +188,17 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             total_cost=total_cost,
             total_roi_percent=total_roi,
             total_value_increase=total_value_increase,
+            total_co2_savings=total_co2,
+            total_kwh_savings=total_kwh,
             summary=summary,
             energy_compliance=EnergyCompliance(
                 current_epc=current_epc,
                 projected_epc=projected_epc,
                 compliance_status=compliance_status,
-                suggested_improvements=suggestions
+                suggested_improvements=suggestions,
+                current_co2_emissions=property_metrics.get("co2_emissions_current"),
+                potential_co2_emissions=property_metrics.get("co2_emissions_potential"),
+                current_energy_consumption=property_metrics.get("energy_consumption_current")
             )
         )
 
