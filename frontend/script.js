@@ -249,7 +249,8 @@ function displayResults(data) {
             <div class="stat-label">Green Investment</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">£${data.total_value_increase.toLocaleString()}</div>
+            <div class="stat-value">£${(Math.round(data.total_value_increase / 100) * 100)
+    .toLocaleString()}</div>
             <div class="stat-label">Green Premium</div>
         </div>
         <div class="stat-card">
@@ -306,7 +307,8 @@ function displayResults(data) {
                     </div>
                     <div class="detail-item highlight-box">
                         <div class="detail-label">Green Premium</div>
-                        <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
+                        <div class="detail-value">£${Math.round(improvement.green_premium_value / 100) * 100
+    .toLocaleString()}</div>
                         ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
                     </div>
                     <div class="detail-item">
@@ -337,7 +339,7 @@ function displayResults(data) {
         lat: data.location.latitude,
         lng: data.location.longitude,
         label: `Current Property: ${data.property_reference}`,
-        epc: data.energy_compliance?.current_epc,
+        epc: data.energy_compliance.current_energy_rating,
         size: 16
     }];
 
@@ -393,7 +395,7 @@ function displayResults(data) {
         const epcBar = document.createElement('div');
         epcBar.className = 'epc-bar-container';
 
-        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_epc);
+        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_energy_rating);
         const projectedIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.projected_epc);
         const goalIndex = EPC_SETTINGS.epcOrder.indexOf(EPC_SETTINGS.goalBand);
 

@@ -192,7 +192,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             total_kwh_savings=total_kwh,
             summary=summary,
             energy_compliance=EnergyCompliance(
-                current_epc=current_epc,
+                current_energy_rating=current_energy_rating,
                 projected_epc=projected_epc,
                 compliance_status=compliance_status,
                 suggested_improvements=suggestions,
