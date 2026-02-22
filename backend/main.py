@@ -34,12 +34,17 @@ app.add_middleware(
 
 IBEX_API_KEY = os.getenv("IBEX_API_KEY", "")
 IBEX_BASE_URL = os.getenv("IBEX_BASE_URL", "https://ibex.seractech.co.uk")
+MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN", "")
 
 ibex_client = IBexClient(IBEX_API_KEY, IBEX_BASE_URL)
 epc_client = EPCClient()
 
 EPC_BAND_TO_NUMERIC = {"A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7}
 NUMERIC_TO_EPC_BAND = {v: k for k, v in EPC_BAND_TO_NUMERIC.items()}
+
+@app.get("/api/config")
+def get_config():
+    return {"mapboxToken": MAPBOX_TOKEN}
 
 @app.post("/api/property/analyze-by-address", response_model=PropertyAnalysisResponse)
 async def analyze_by_address(request: AddressAnalysisRequest):

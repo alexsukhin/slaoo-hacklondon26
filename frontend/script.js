@@ -1,5 +1,19 @@
 const API_BASE_URL = 'http://localhost:8000';
 
+let MAPBOX_TOKEN = "";
+
+async function loadConfig() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/config`);
+        const data = await res.json();
+        MAPBOX_TOKEN = data.mapboxToken;
+    } catch (err) {
+        console.error("Failed to load Mapbox token:", err);
+    }
+}
+
+loadConfig();
+
 const form = document.getElementById('analysisForm');
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
@@ -30,6 +44,47 @@ form.addEventListener('submit', async (e) => {
     await analyzeProperty(requestData);
 });
 
+
+function renderMap(containerId, centerLat, centerLng, markers = []) {
+    if (!MAPBOX_TOKEN) return console.error("Mapbox token not loaded yet!");
+
+    // Remove old map if exists
+    const oldMap = document.getElementById(containerId);
+    if (oldMap) oldMap.remove();
+
+    // Map container card
+    const mapCard = document.createElement('div');
+    mapCard.className = 'card';
+    mapCard.style.marginTop = '20px';
+    mapCard.innerHTML = `
+        <h3>Property Location</h3>
+        <div id="${containerId}" style="height: 400px; border-radius: 8px;"></div>
+    `;
+    resultsContainer.appendChild(mapCard);
+
+    // Initialize Mapbox
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const map = new mapboxgl.Map({
+        container: containerId,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [centerLng, centerLat],
+        zoom: 15
+    });
+
+    // Add each marker
+    markers.forEach(marker => {
+        new mapboxgl.Marker({ color: marker.color || '#e63946' })
+            .setLngLat([marker.lng, marker.lat])
+            .addTo(map);
+
+        if (marker.label) {
+            new mapboxgl.Popup({ offset: 25 })
+                .setLngLat([marker.lng, marker.lat])
+                .setHTML(`<strong>${marker.label}</strong>`)
+                .addTo(map);
+        }
+    });
+}
 async function analyzeProperty(data) {
     hideAll();
     loadingState.style.display = 'block';
@@ -191,6 +246,35 @@ function displayResults(data) {
     // Append the nav and content to the DOM
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
+
+
+    // Map
+    // Start with main property
+    const markers = [
+        {
+            lat: data.location.latitude,
+            lng: data.location.longitude,
+            label: `Current Property: ${data.property_reference}`,
+            color: '#e63946'
+        }
+    ];
+
+    // Loop through improvements and their examples (if they have lat/lng)
+    data.improvements.forEach(imp => {
+        imp.examples.forEach(example => {
+            if (example.latitude && example.longitude) {
+                markers.push({
+                    lat: example.latitude,
+                    lng: example.longitude,
+                    label: `${example.planning_reference}: ${imp.improvement_type}`,
+                    color: '#457b9d' // different color for examples
+                });
+            }
+        });
+    });
+
+    // Render map with all markers, centered on main property
+    renderMap("propertyMap", data.location.latitude, data.location.longitude, markers);
 
     const EPC_SETTINGS = {
         colors: {
