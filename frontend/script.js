@@ -27,7 +27,6 @@ function normalizeEpcBand(band) {
     if (!band) return "D";
     return band.toUpperCase().trim();
 }
-
 // Navigation Logic
 const navButtons = document.querySelectorAll('.nav-btn');
 const contentSections = document.querySelectorAll('.content-section');
@@ -42,7 +41,7 @@ function switchTab(targetId) {
     const activeBtn = document.querySelector(`.nav-btn[data-target="${targetId}"]`);
     if(activeBtn) activeBtn.classList.add('active');
 
-    // Mapbox resize if rendering in hidden section
+    // VERY IMPORTANT: Mapbox requires a resize event if it was rendered while hidden
     if (targetId === 'mapSection') {
         Object.values(mapInstances).forEach(map => {
             setTimeout(() => map.resize(), 50);
@@ -68,7 +67,7 @@ function getEpcColor(band) {
     return epcColors[normalizeEpcBand(band)] || '#457b9d';
 }
 
-// Render Mapbox map with markers
+// Render map targeting the specific map section
 function renderMap(containerId, centerLat, centerLng, markers = []) {
     const mapSection = document.getElementById('mapSection');
     
@@ -80,8 +79,7 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
     mapCard.id = containerId + "Card";
-    mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2>
-                         <div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
+    mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2><div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
     mapSection.appendChild(mapCard);
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -101,7 +99,7 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
             el.style.width = size + 'px';
             el.style.height = size + 'px';
             el.style.borderRadius = '50%';
-            el.style.backgroundColor = marker.color || getEpcColor(marker.epc);
+            el.style.backgroundColor = getEpcColor(marker.epc);
             el.style.border = '1.5px solid white';
             el.style.boxShadow = '0 0 6px rgba(0,0,0,0.4)';
             el.style.cursor = 'pointer';
@@ -147,18 +145,27 @@ form.addEventListener('submit', async (e) => {
     await analyzeProperty(requestData);
 });
 
-// Analyze property
+
 async function analyzeProperty(data) {
     hideGlobalStates();
+    // Hide all main content while loading
     contentSections.forEach(section => section.classList.remove('active'));
     loadingState.style.display = 'block';
     submitBtn.disabled = true;
-
+    
+    const payload = {
+        address_query: data.address_query, 
+        budget: data.budget,
+        desired_improvements: data.desired_improvements
+    };
+    
     try {
         const response = await fetch(`${API_BASE_URL}/api/property/analyze-by-address`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload) 
         });
 
         if (!response.ok) {
@@ -168,15 +175,15 @@ async function analyzeProperty(data) {
 
         const results = await response.json();
         displayResults(results);
-
-        // Show navigation and switch to Overview
+        
+        // Show navigation options and switch to Overview
         document.getElementById('resultsNav').style.display = 'block';
         switchTab('overviewSection');
-
+        
     } catch (error) {
         console.error('Error:', error);
         showError(error.message || 'Failed to analyze property.');
-        switchTab('formSection');
+        switchTab('formSection'); // Go back to form if it failed
     } finally {
         loadingState.style.display = 'none';
         submitBtn.disabled = false;
@@ -194,31 +201,54 @@ function displayResults(data) {
     // Stats
     const statsGrid = document.getElementById('statsGrid');
     const withinBudget = data.total_cost <= data.budget;
+    const treesEquivalent = Math.round(data.total_co2_savings / 21);
+    
     statsGrid.innerHTML = `
-        <div class="stat-card"><div class="stat-value">£${data.total_cost.toLocaleString()}</div><div class="stat-label">Total Cost</div></div>
-        <div class="stat-card"><div class="stat-value">${data.total_roi_percent.toFixed(1)}%</div><div class="stat-label">Total ROI</div></div>
-        <div class="stat-card"><div class="stat-value">£${data.total_value_increase.toLocaleString()}</div><div class="stat-label">Value Increase</div></div>
-        <div class="stat-card"><div class="stat-value">${withinBudget ? '✓ Yes' : '✗ No'}</div><div class="stat-label">Within Budget</div></div>
+        <div class="stat-card" style="border-color: var(--primary-green); background-color: var(--status-high-bg);">
+            <div class="stat-value" style="color: var(--primary-green);">🌱 ${data.total_co2_savings.toLocaleString()} kg</div>
+            <div class="stat-label">Annual CO₂ Reduction</div>
+            <div style="font-size: 0.8rem; margin-top: 8px; color: var(--text-muted);">
+                Equivalent to planting <strong>${treesEquivalent} trees</strong>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">£${data.total_cost.toLocaleString()}</div>
+            <div class="stat-label">Green Investment</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">£${data.total_value_increase.toLocaleString()}</div>
+            <div class="stat-label">Green Premium</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${withinBudget ? '✓ Yes' : '✗ No'}</div>
+            <div class="stat-label">Within Budget</div>
+        </div>
     `;
 
     // Improvements tabs
     const improvementsSection = document.getElementById('improvementsSection');
-    improvementsSection.innerHTML = '<h3 style="margin-bottom:20px;">Improvement Analysis</h3>';
-    const tabsNav = document.createElement('div'); tabsNav.className = 'tabs-nav';
-    const tabsContent = document.createElement('div'); tabsContent.className = 'tabs-content';
-
-    data.improvements.forEach((imp, idx) => {
+    improvementsSection.innerHTML = '<h3 style="margin-bottom: 20px;">Improvement Analysis</h3>';
+    
+    const tabsNav = document.createElement('div');
+    tabsNav.className = 'tabs-nav';
+    const tabsContent = document.createElement('div');
+    tabsContent.className = 'tabs-content';
+    
+    data.improvements.forEach((improvement, index) => {
+        const isFirst = index === 0;
+        const prettyName = improvement.improvement_type.replace('_', ' ');
+        
         const tabBtn = document.createElement('button');
-        tabBtn.className = `tab-btn ${idx === 0 ? 'active' : ''}`;
-        tabBtn.textContent = imp.improvement_type.replace('_',' ');
+        tabBtn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
+        tabBtn.textContent = improvement.improvement_type.replace('_',' ');
         tabsNav.appendChild(tabBtn);
-
+        
         const tabPane = document.createElement('div');
-        tabPane.className = `tab-pane ${idx === 0 ? 'active' : ''}`;
+        tabPane.className = `tab-pane ${index === 0 ? 'active' : ''}`;
 
-        const examplesHTML = imp.examples && imp.examples.length > 0
+        const examplesHTML = improvement.examples && improvement.examples.length > 0
             ? `<div class="examples-section"><h4>Recent Approved Examples:</h4>
-               ${imp.examples.slice(0,3).map(ex => `
+               ${improvement.examples.slice(0,3).map(ex => `
                  <div class="example-item">
                    <span class="example-ref">${ex.planning_reference}</span>
                    ${ex.decision_time_days ? ` - ${ex.decision_time_days} days` : ''}
@@ -229,34 +259,47 @@ function displayResults(data) {
         tabPane.innerHTML = `
             <div class="improvement-item">
                 <div class="improvement-header">
-                    <div class="improvement-title">${imp.improvement_type.replace('_',' ')}</div>
-                    <div class="feasibility-badge feasibility-${imp.feasibility}">${imp.feasibility} FEASIBILITY</div>
+                    <div class="improvement-title">${improvement.improvement_type.replace('_',' ')}</div>
+                    <div class="feasibility-badge feasibility-${improvement.feasibility}">${improvement.feasibility} FEASIBILITY</div>
                 </div>
                 <div class="improvement-details">
-                    <div class="detail-item"><div class="detail-label">Estimated Cost</div><div class="detail-value">£${imp.estimated_cost.toLocaleString()}</div></div>
-                    <div class="detail-item"><div class="detail-label">ROI</div><div class="detail-value">${imp.estimated_roi_percent.toFixed(1)}%</div></div>
-                    <div class="detail-item highlight-box"><div class="detail-label">Value Increase</div><div class="detail-value">£${imp.green_premium_value.toLocaleString()}</div>${imp.value_explanation?`<div class="detail-explanation">${imp.value_explanation}</div>`:''}</div>
-                    <div class="detail-item"><div class="detail-label">Approved Examples</div><div class="detail-value">${imp.approved_examples}</div></div>
-                    <div class="detail-item"><div class="detail-label">Avg. Approval Time</div><div class="detail-value">${imp.average_time_days?Math.round(imp.average_time_days)+' days':'N/A'}</div></div>
+                    <div class="detail-item">
+                        <div class="detail-label">Green Investment</div>
+                        <div class="detail-value">£${improvement.estimated_cost.toLocaleString()}</div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">Energy Savings</div>
+                        <div class="detail-value">${improvement.kwh_savings.toLocaleString()} kWh/yr</div>
+                    </div>
+                    <div class="detail-item highlight-box">
+                        <div class="detail-label">Green Premium</div>
+                        <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
+                        ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-label">CO₂ Reduction</div>
+                        <div class="detail-value">${improvement.co2_savings_kg.toLocaleString()} kg/yr</div>
+                    </div>
                 </div>
                 ${examplesHTML}
             </div>
         `;
 
         tabsContent.appendChild(tabPane);
-
+        
         tabBtn.addEventListener('click', () => {
-            Array.from(tabsNav.children).forEach(b=>b.classList.remove('active'));
-            Array.from(tabsContent.children).forEach(p=>p.classList.remove('active'));
+            Array.from(tabsNav.children).forEach(btn => btn.classList.remove('active'));
+            Array.from(tabsContent.children).forEach(pane => pane.classList.remove('active'));
+            
             tabBtn.classList.add('active');
             tabPane.classList.add('active');
         });
     });
-
+    
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
 
-    // Map markers
+    // Map logic remains identical
     const markers = [{
         lat: data.location.latitude,
         lng: data.location.longitude,
@@ -271,31 +314,138 @@ function displayResults(data) {
                 markers.push({
                     lat: ex.latitude,
                     lng: ex.longitude,
-                    label: `<strong>${ex.planning_reference}</strong><br>${imp.improvement_type}<br>EPC: ${normalizeEpcBand(ex.current_epc) || 'Unknown'}`,
-                    epc: normalizeEpcBand(ex.current_energy_rating) || data.energy_compliance?.current_epc,
-                    size: 12
+                    label: `<strong>${ex.planning_reference}</strong><br>${imp.improvement_type}<br>EPC: ${normalizeEpcBand(ex.current_energy_rating) || 'Unknown'}`,
+                    epc: normalizeEpcBand(ex.current_energy_rating),
+                    size: 12,
                 });
             }
         });
     });
 
-    renderMap('propertyMap', data.location.latitude, data.location.longitude, markers);
+    renderMap("propertyMap", data.location.latitude, data.location.longitude, markers);
 
-    resultsContainer.scrollIntoView({behavior:'smooth', block:'nearest'});
+    // EPC Settings & Logic
+    const EPC_SETTINGS = {
+        colors: {
+            current: '#2b2d42', predicted: '#8d99ae', goal: '#edf2f4',
+            belowGoal: '#fbeaec', belowGoalText: '#7a222b',
+            goalText: '#000', predictedText: '#fff', currentText: '#fff',
+        },
+        epcOrder: ["G","F","E","D","C","B","A"],
+        goalBand: "C",
+        goalTextMuted: "Necessary EPC C by 2030"
+    };
+
+    if (data.energy_compliance) {
+        const compliance = data.energy_compliance;
+        const epcSection = document.getElementById('epcSection');
+        epcSection.innerHTML = '';
+
+        const epcCard = document.createElement('div');
+        epcCard.id = 'epcCard';
+        epcCard.className = 'card epc-card';
+
+        const title = document.createElement('h2');
+        title.textContent = "Energy & Environmental Compliance";
+        epcCard.appendChild(title);
+
+        const mutedText = document.createElement('p');
+        mutedText.className = 'text-muted';
+        mutedText.style.fontSize = '0.95rem';
+        mutedText.style.color = '#5B6B45';
+        mutedText.style.marginBottom = '20px';
+        mutedText.textContent = EPC_SETTINGS.goalTextMuted;
+        epcCard.appendChild(mutedText);
+
+        const epcBar = document.createElement('div');
+        epcBar.className = 'epc-bar-container';
+
+        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_epc);
+        const projectedIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.projected_epc);
+        const goalIndex = EPC_SETTINGS.epcOrder.indexOf(EPC_SETTINGS.goalBand);
+
+        EPC_SETTINGS.epcOrder.forEach((band, i) => {
+            const segment = document.createElement('div');
+            segment.className = 'epc-segment';
+            segment.textContent = band;
+
+            if (i <= currentIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.current;
+                segment.style.color = EPC_SETTINGS.colors.currentText;
+                segment.title = `${band} (Current)`;
+            } else if (i <= projectedIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.predicted;
+                segment.style.color = EPC_SETTINGS.colors.predictedText;
+                segment.title = `${band} (Predicted)`;
+            } else if (i <= goalIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.goal;
+                segment.style.color = EPC_SETTINGS.colors.goalText;
+                segment.title = `${band} (Goal)`;
+            } else {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.belowGoal;
+                segment.style.color = EPC_SETTINGS.colors.belowGoalText;
+                segment.title = band;
+            }
+            epcBar.appendChild(segment);    
+        });
+
+        epcCard.appendChild(epcBar);
+
+        const legend = document.createElement('div');
+        legend.className = 'epc-legend';
+        legend.style.marginTop = '20px';
+
+        const legendItems = [
+            { label: 'Current Rating', color: EPC_SETTINGS.colors.current, textColor: EPC_SETTINGS.colors.currentText },
+            { label: 'Predicted Output', color: EPC_SETTINGS.colors.predicted, textColor: EPC_SETTINGS.colors.predictedText },
+            { label: 'Target Minimum', color: EPC_SETTINGS.colors.belowGoal, textColor: EPC_SETTINGS.colors.goalText }
+        ];
+
+        legendItems.forEach(item => {
+            const span = document.createElement('span');
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.style.backgroundColor = item.color;
+            if(item.textColor) box.style.color = item.textColor;
+            span.appendChild(box);
+            const text = document.createTextNode(item.label);
+            span.appendChild(text);
+            legend.appendChild(span);
+        });
+        
+        // Inject Real Carbon Data if available
+        if (compliance.current_co2_emissions) {
+            const carbonData = document.createElement('div');
+            carbonData.style.marginTop = '25px';
+            carbonData.style.paddingTop = '20px';
+            carbonData.style.borderTop = '1px dashed var(--border-color)';
+            carbonData.innerHTML = `
+                <h4 style="margin-bottom: 12px; font-size: 1rem;">Current Property Footprint (EPC Data)</h4>
+                <div style="display: flex; gap: 20px;">
+                    <div><span style="color: var(--text-muted); font-size: 0.85rem;">Current Emissions:</span> <br><strong>${compliance.current_co2_emissions} tonnes/yr</strong></div>
+                    <div><span style="color: var(--text-muted); font-size: 0.85rem;">Potential Emissions:</span> <br><strong>${compliance.potential_co2_emissions} tonnes/yr</strong></div>
+                    ${compliance.current_energy_consumption ? `<div><span style="color: var(--text-muted); font-size: 0.85rem;">Energy Consumption:</span> <br><strong>${compliance.current_energy_consumption} kWh/m²/yr</strong></div>` : ''}
+                </div>
+            `;
+            epcCard.appendChild(carbonData);
+        }
+
+        epcCard.appendChild(legend);
+        epcSection.appendChild(epcCard);
+    }
 }
 
-// Error and hide helpers
-function showError(msg){
+function showError(message) {
     hideGlobalStates();
-    errorState.style.display='block';
-    document.querySelector('.error-message').textContent=msg;
-}
-function hideGlobalStates(){
-    loadingState.style.display='none';
-    errorState.style.display='none';
+    errorState.style.display = 'block';
+    document.querySelector('.error-message').textContent = message;
 }
 
-// Health check
+function hideGlobalStates() {
+    loadingState.style.display = 'none';
+    errorState.style.display = 'none';
+}
+
 async function checkHealth() {
     try {
         const response = await fetch(`${API_BASE_URL}/health`);
