@@ -123,7 +123,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         for improvement_type in request.desired_improvements:
             matching = filter_by_improvement_type(applications, improvement_type)
             avg_time = calculate_average_approval_time(matching)
-            examples = extract_examples(matching, limit=5)
+            examples = extract_examples(matching, property_metrics=property_metrics, limit=5)
 
             estimated_cost, cost_explanation = calculate_cost(
                 improvement_type=improvement_type, 
