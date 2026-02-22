@@ -304,7 +304,7 @@ function displayResults(data) {
         lat: data.location.latitude,
         lng: data.location.longitude,
         label: `Current Property: ${data.property_reference}`,
-        epc: data.energy_compliance?.current_epc,
+        epc: data.energy_compliance.current_energy_rating,
         size: 16
     }];
 
@@ -360,7 +360,7 @@ function displayResults(data) {
         const epcBar = document.createElement('div');
         epcBar.className = 'epc-bar-container';
 
-        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_epc);
+        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_energy_rating);
         const projectedIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.projected_epc);
         const goalIndex = EPC_SETTINGS.epcOrder.indexOf(EPC_SETTINGS.goalBand);
 

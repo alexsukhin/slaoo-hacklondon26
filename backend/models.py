@@ -10,7 +10,7 @@ class PropertyAnalysisRequest(BaseModel):
     longitude: Optional[float] = None
 
 class EnergyCompliance(BaseModel):
-    current_epc: str
+    current_energy_rating: str
     projected_epc: str
     compliance_status: str
     suggested_improvements: Optional[List[str]] = []
