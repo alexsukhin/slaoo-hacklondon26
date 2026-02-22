@@ -68,20 +68,49 @@ function getEpcColor(band) {
 }
 
 // Render map targeting the specific map section
+// Render map targeting the specific map section
 function renderMap(containerId, centerLat, centerLng, markers = []) {
     const mapSection = document.getElementById('mapSection');
     
     if (mapInstances[containerId]) mapInstances[containerId].remove();
 
+    // Clean up old instances of this specific map card and its legend
     const oldCard = document.getElementById(containerId + "Card");
     if (oldCard) oldCard.remove();
+    const oldLegend = document.getElementById(containerId + "Legend");
+    if (oldLegend) oldLegend.remove();
 
+    // 1. Create Map Card
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
     mapCard.id = containerId + "Card";
     mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2><div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
     mapSection.appendChild(mapCard);
 
+    // 2. Create Map Legend Card
+    const legendCard = document.createElement('div');
+    legendCard.className = 'card';
+    legendCard.id = containerId + "Legend";
+    legendCard.style.marginTop = '15px';
+    
+    const epcColors = {
+        A: '#1a9641', B: '#4daf4a', C: '#a6d96a', D: '#ffffbf',
+        E: '#fdae61', F: '#f46d43', G: '#d73027'
+    };
+
+    let legendHTML = `<h4 style="margin-bottom:15px;">Map Key: EPC Ratings</h4><div style="display: flex; flex-wrap: wrap; gap: 15px;">`;
+    Object.entries(epcColors).forEach(([band, color]) => {
+        legendHTML += `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div style="width: 12px; height: 12px; border-radius: 50%; background-color: ${color}; border: 1px solid #ccc;"></div>
+                <span style="font-size: 0.85rem; font-weight: 600;">Band ${band}</span>
+            </div>`;
+    });
+    legendHTML += `</div>`;
+    legendCard.innerHTML = legendHTML;
+    mapSection.appendChild(legendCard);
+
+    // 3. Initialize Mapbox
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
         container: containerId,
@@ -118,7 +147,6 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
     mapInstances[containerId] = map;
     setTimeout(() => map.resize(), 100);
 }
-
 // Form submission
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
