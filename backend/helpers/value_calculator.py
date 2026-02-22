@@ -5,7 +5,8 @@ import base64
 from typing import Optional, Tuple, List, Dict, Any
 
 EPC_PREMIUMS = {'A': 0.14, 'B': 0.10, 'C': 0.05, 'D': 0.00, 'E': -0.05, 'F': -0.08, 'G': -0.12}
-EXPECTED_EPC_JUMP = {"solar": 1, "insulation": 2, "windows": 1, "heat_pump": 2}
+EXPECTED_EPC_JUMP = {"solar": 1, "insulation": 2, "windows": 1, "heat_pump": 2,
+                     "battery": 1, "loft_conversion": 1, "cladding": 1, "ev_charger": 1}
 EPC_BANDS = ['G', 'F', 'E', 'D', 'C', 'B', 'A']
 
 async def fetch_district_average_price(postcode: str) -> Optional[float]:
@@ -193,10 +194,57 @@ def calculate_value_increase(
     if recommendations:
         # Keywords map our front-end terms to the EPC API descriptions
         EPC_KEYWORD_MAP = {
-            "solar": ["solar", "photovoltaic", "pv"],
-            "insulation": ["insulation", "cavity", "solid wall", "loft", "roof"],
-            "windows": ["glazing", "double glazed", "secondary glazing", "window"],
-            "heat_pump": ["heat pump", "air source", "ground source"]
+            "solar": [
+                "solar", "photovoltaic", "pv", "pv panel",
+                "solar panel", "solar pv", "photovoltaics"
+            ],
+
+            "insulation": [
+                "insulation", "wall insulation", "external wall",
+                "cavity wall", "loft insulation", "roof insulation"
+            ],
+
+            "windows": [
+                "window", "windows", "double glazing",
+                "triple glazing", "glazing", "u-value",
+                "energy efficient windows"
+            ],
+
+            "heat_pump": [
+                "heat pump", "air source", "ground source",
+                "ashp", "gshp",
+                "air source heat pump",
+                "ground source heat pump"
+            ],
+
+            "battery": [
+                "battery storage", "home battery",
+                "powerwall", "battery unit",
+                "energy storage system",
+                "tesla battery"
+            ],
+
+            "loft_conversion": [
+                "loft conversion", "roof extension",
+                "dormer", "mansard",
+                "roof enlargement", "attic conversion"
+            ],
+
+            "cladding": [
+                "external cladding", "render",
+                "external wall finish",
+                "facade upgrade", "wall rendering",
+                "external insulation system"
+            ],
+
+            "ev_charger": [
+                "electric vehicle charger",
+                "ev charger",
+                "charging point",
+                "vehicle charging",
+                "car charging point",
+                "ev installation"
+            ]
         }
         keywords = EPC_KEYWORD_MAP.get(improvement_key, [])
         

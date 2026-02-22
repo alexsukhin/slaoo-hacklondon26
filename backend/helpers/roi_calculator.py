@@ -5,14 +5,22 @@ ANNUAL_IMPACT_BENCHMARKS = {
     "solar": {"money": 1100.0, "kwh": 3500.0, "co2_kg": 850.0},
     "insulation": {"money": 450.0, "kwh": 2800.0, "co2_kg": 600.0},
     "windows": {"money": 180.0, "kwh": 1200.0, "co2_kg": 250.0},
-    "heat_pump": {"money": 650.0, "kwh": 4000.0, "co2_kg": 1500.0}
+    "heat_pump": {"money": 650.0, "kwh": 4000.0, "co2_kg": 1500.0},
+    "battery": {"money": 150.0, "kwh": 500.0, "co2_kg": 50.0},
+    "loft_conversion": {"money": 0.0, "kwh": 50.0, "co2_kg": 10.0},
+    "cladding": {"money": 300.0, "kwh": 2000.0, "co2_kg": 400.0},
+    "ev_charger": {"money": 50.0, "kwh": 50.0, "co2_kg": 10.0},    
 }
 
 SYSTEM_LIFESPAN = {
     "solar": 25,
     "insulation": 40,
     "windows": 20,
-    "heat_pump": 15
+    "heat_pump": 15,
+    "battery": 15,
+    "loft_conversion": 50,
+    "cladding": 30,
+    "ev_charger": 10,
 }
 
 def get_environmental_impact(improvement_type: str) -> Tuple[float, float]:
