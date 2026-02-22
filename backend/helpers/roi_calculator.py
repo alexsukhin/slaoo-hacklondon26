@@ -1,15 +1,13 @@
-from typing import Dict, Any, Tuple # Added Any and Tuple to imports
+from typing import Dict, Any, Tuple
 
-# 2025 Benchmarks: Estimated Annual Energy Savings
-# Based on typical 3-bed semi-detached gas-heated home
-ANNUAL_SAVINGS_BENCHMARKS = {
-    "solar": 1100.0,      # Savings + Smart Export Guarantee (SEG)
-    "insulation": 450.0,  # Based on external wall insulation
-    "windows": 180.0,     # Double glazing savings
-    "heat_pump": 650.0    # Savings vs. old gas boiler
+# 2025 Benchmarks: Estimated Annual Impacts (Financial, Energy, Carbon)
+ANNUAL_IMPACT_BENCHMARKS = {
+    "solar": {"money": 1100.0, "kwh": 3500.0, "co2_kg": 850.0},
+    "insulation": {"money": 450.0, "kwh": 2800.0, "co2_kg": 600.0},
+    "windows": {"money": 180.0, "kwh": 1200.0, "co2_kg": 250.0},
+    "heat_pump": {"money": 650.0, "kwh": 4000.0, "co2_kg": 1500.0}
 }
 
-# Lifespan in years for total value calculation
 SYSTEM_LIFESPAN = {
     "solar": 25,
     "insulation": 40,
@@ -17,34 +15,29 @@ SYSTEM_LIFESPAN = {
     "heat_pump": 15
 }
 
+def get_environmental_impact(improvement_type: str) -> Tuple[float, float]:
+    """Returns estimated annual CO2 savings (kg) and Energy savings (kWh)."""
+    imp_key = improvement_type.lower()
+    impact = ANNUAL_IMPACT_BENCHMARKS.get(imp_key, {"co2_kg": 0.0, "kwh": 0.0})
+    return impact["co2_kg"], impact["kwh"]
+
 def calculate_roi_proper(
     improvement_type: str,
     estimated_cost: float,
     value_increase: float,
     analysis_period_years: int = 10
 ) -> Dict[str, Any]:
-    """
-    Advanced ROI Calculation incorporating capital growth and operational savings.
-    """
     imp_key = improvement_type.lower()
-    annual_savings = ANNUAL_SAVINGS_BENCHMARKS.get(imp_key, 200.0)
+    annual_savings = ANNUAL_IMPACT_BENCHMARKS.get(imp_key, {"money": 200.0})["money"]
     
-    # 1. Calculate Total Savings over the analysis period (e.g., 10 years)
     total_savings = annual_savings * analysis_period_years
-    
-    # 2. Subtract Maintenance Costs (Estimated at 1% of cost annually)
     total_maintenance = (estimated_cost * 0.01) * analysis_period_years
-    
-    # 3. Total Benefit = Capital Value Increase + Energy Savings - Maintenance
     total_benefit = value_increase + total_savings - total_maintenance
     
-    # 4. ROI Percentage: (Total Benefit - Cost) / Cost * 100
     if estimated_cost <= 0:
         return {"roi_percent": 0, "payback_years": 0}
         
     roi_percent = ((total_benefit - estimated_cost) / estimated_cost) * 100
-    
-    # 5. Payback Period (Years to recover initial capital from savings alone)
     payback_years = estimated_cost / annual_savings if annual_savings > 0 else 99
     
     return {
@@ -54,7 +47,6 @@ def calculate_roi_proper(
         "annual_savings": annual_savings
     }
 
-# Failsafe for original import in main.py
 def calculate_roi(estimated_cost: float, value_increase: float) -> float:
     if estimated_cost == 0:
         return 0

@@ -19,14 +19,40 @@ loadConfig();
 const form = document.getElementById('analysisForm');
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
-const resultsContainer = document.getElementById('resultsContainer');
 const submitBtn = document.getElementById('submitBtn');
+const resultsContainer = document.getElementById('resultsContainer');
 
 // Normalize EPC band safely
 function normalizeEpcBand(band) {
     if (!band) return "D";
     return band.toUpperCase().trim();
 }
+
+// Navigation Logic
+const navButtons = document.querySelectorAll('.nav-btn');
+const contentSections = document.querySelectorAll('.content-section');
+
+function switchTab(targetId) {
+    // Hide all sections and remove active classes from buttons
+    contentSections.forEach(section => section.classList.remove('active'));
+    navButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Show target section and highlight corresponding button
+    document.getElementById(targetId).classList.add('active');
+    const activeBtn = document.querySelector(`.nav-btn[data-target="${targetId}"]`);
+    if(activeBtn) activeBtn.classList.add('active');
+
+    // Mapbox resize if rendering in hidden section
+    if (targetId === 'mapSection') {
+        Object.values(mapInstances).forEach(map => {
+            setTimeout(() => map.resize(), 50);
+        });
+    }
+}
+
+navButtons.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.target));
+});
 
 // Map marker color by EPC
 function getEpcColor(band) {
@@ -44,6 +70,8 @@ function getEpcColor(band) {
 
 // Render Mapbox map with markers
 function renderMap(containerId, centerLat, centerLng, markers = []) {
+    const mapSection = document.getElementById('mapSection');
+    
     if (mapInstances[containerId]) mapInstances[containerId].remove();
 
     const oldCard = document.getElementById(containerId + "Card");
@@ -52,9 +80,9 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
     mapCard.id = containerId + "Card";
-    mapCard.style.marginTop = '20px';
-    mapCard.innerHTML = `<div id="${containerId}" style="height:400px;width:100%;border-radius:8px;overflow:hidden;"></div>`;
-    resultsContainer.appendChild(mapCard);
+    mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2>
+                         <div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
+    mapSection.appendChild(mapCard);
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
@@ -73,7 +101,7 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
             el.style.width = size + 'px';
             el.style.height = size + 'px';
             el.style.borderRadius = '50%';
-            el.style.backgroundColor = getEpcColor(marker.epc);
+            el.style.backgroundColor = marker.color || getEpcColor(marker.epc);
             el.style.border = '1.5px solid white';
             el.style.boxShadow = '0 0 6px rgba(0,0,0,0.4)';
             el.style.cursor = 'pointer';
@@ -121,7 +149,8 @@ form.addEventListener('submit', async (e) => {
 
 // Analyze property
 async function analyzeProperty(data) {
-    hideAll();
+    hideGlobalStates();
+    contentSections.forEach(section => section.classList.remove('active'));
     loadingState.style.display = 'block';
     submitBtn.disabled = true;
 
@@ -140,9 +169,14 @@ async function analyzeProperty(data) {
         const results = await response.json();
         displayResults(results);
 
+        // Show navigation and switch to Overview
+        document.getElementById('resultsNav').style.display = 'block';
+        switchTab('overviewSection');
+
     } catch (error) {
         console.error('Error:', error);
         showError(error.message || 'Failed to analyze property.');
+        switchTab('formSection');
     } finally {
         loadingState.style.display = 'none';
         submitBtn.disabled = false;
@@ -151,8 +185,7 @@ async function analyzeProperty(data) {
 
 // Display results
 function displayResults(data) {
-    hideAll();
-    resultsContainer.style.display = 'block';
+    hideGlobalStates();
 
     // Summary
     const summarySection = document.getElementById('summarySection');
@@ -231,6 +264,7 @@ function displayResults(data) {
         epc: data.energy_compliance?.current_epc,
         size: 16
     }];
+
     data.improvements.forEach(imp => {
         imp.examples.forEach(ex => {
             if(ex.latitude && ex.longitude){
@@ -247,40 +281,27 @@ function displayResults(data) {
 
     renderMap('propertyMap', data.location.latitude, data.location.longitude, markers);
 
-    // EPC bar
-    if(data.energy_compliance){
-        const epcSettings = {
-            colors:{current:'#2b2d42',predicted:'#8d99ae',goal:'#edf2f4',belowGoal:'#fbeaec'},
-            epcOrder:["G","F","E","D","C","B","A"],
-            goalBand:"C"
-        };
-
-        const oldCard = document.getElementById('epcCard'); if(oldCard) oldCard.remove();
-        const epcCard = document.createElement('div'); epcCard.id='epcCard'; epcCard.className='epc-card';
-        epcCard.innerHTML='<h3>Energy Compliance (EPC 2030 Target)</h3>';
-
-        const epcBar = document.createElement('div'); epcBar.className='epc-bar-container';
-
-        const currentEpc = normalizeEpcBand(data.energy_compliance.current_epc);
-        const projectedEpc = normalizeEpcBand(data.energy_compliance.projected_epc);
-        const goalIndex = epcSettings.epcOrder.indexOf(epcSettings.goalBand);
-
-        epcSettings.epcOrder.forEach((band,i)=>{
-            const seg = document.createElement('div'); seg.className='epc-segment'; seg.textContent=band;
-            if(i <= epcSettings.epcOrder.indexOf(currentEpc)){ seg.style.backgroundColor=epcSettings.colors.current; seg.style.color='#fff'; }
-            else if(i <= epcSettings.epcOrder.indexOf(projectedEpc)){ seg.style.backgroundColor=epcSettings.colors.predicted; seg.style.color='#fff'; }
-            else if(i <= goalIndex){ seg.style.backgroundColor=epcSettings.colors.goal; seg.style.color='#000'; }
-            else { seg.style.backgroundColor=epcSettings.colors.belowGoal; seg.style.color='#7a222b'; }
-            epcBar.appendChild(seg);
-        });
-
-        epcCard.appendChild(epcBar);
-        resultsContainer.appendChild(epcCard);
-    }
-
     resultsContainer.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 // Error and hide helpers
-function showError(msg){ hideAll(); errorState.style.display='block'; document.querySelector('.error-message').textContent=msg; }
-function hideAll(){ loadingState.style.display='none'; errorState.style.display='none'; resultsContainer.style.display='none'; }
+function showError(msg){
+    hideGlobalStates();
+    errorState.style.display='block';
+    document.querySelector('.error-message').textContent=msg;
+}
+function hideGlobalStates(){
+    loadingState.style.display='none';
+    errorState.style.display='none';
+}
+
+// Health check
+async function checkHealth() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/health`);
+        if (!response.ok) console.warn('API health check failed');
+    } catch (error) {
+        console.warn('Could not connect to API:', error);
+    }
+}
+checkHealth();

@@ -15,73 +15,98 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Proptech ROI Analysis</h1>
-            <p>Analyze cost-benefit of property energy efficiency upgrades</p>
-        </header>
-
-        <div class="card">
-            <h2>Property Analysis</h2>
-            <form id="analysisForm">
-                <div class="form-group">
-                    <label for="propertyReference">Address</label>
-                    <input type="text" id="propertyReference" placeholder="e.g., N11 1JH" required>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <h1 style="font-size: 1.6rem; line-height: 1.2;">Home Retrofit &<br>Sustainability</h1>
+                <p style="margin-top: 6px;">Impact Analyzer</p>
+            </header>
+            
+            <nav id="sidebarNav" class="sidebar-nav">
+                <button class="nav-btn active" data-target="formSection"><b>New Analysis</b></button>
+                <div id="resultsNav" style="display: none;">
+                    <div class="nav-divider">Results</div>
+                    <button class="nav-btn" data-target="overviewSection">Overview</button>
+                    <button class="nav-btn" data-target="improvementsSectionWrapper">Improvements</button>
+                    <button class="nav-btn" data-target="mapSection">Location Map</button>
+                    <button class="nav-btn" data-target="epcSection">EPC Compliance</button>
                 </div>
+            </nav>
+        </aside>
 
-                <div class="form-group">
-                    <label for="budget">Budget (£)</label>
-                    <input type="number" id="budget" placeholder="e.g., 15000" required min="0">
-                </div>
-
-                <div class="form-group">
-                    <label>Desired Improvements</label>
-                    <div class="checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="improvements" value="solar">
-                            <span>Solar Panels</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="improvements" value="insulation">
-                            <span>Insulation</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="improvements" value="windows">
-                            <span>Windows</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="improvements" value="heat_pump">
-                            <span>Heat Pump</span>
-                        </label>
-                    </div>
-                </div>
-
-                <button type="submit" class="btn-primary" id="submitBtn">
-                    Analyze Property
-                </button>
-            </form>
-        </div>
-
-        <div id="loadingState" class="loading-state" style="display: none;">
-            <div class="spinner"></div>
-            <p>Analyzing property...</p>
-        </div>
-
-        <div id="errorState" class="error-state" style="display: none;">
-            <div class="error-message"></div>
-        </div>
-
-        <div id="resultsContainer" style="display: none;">
-            <div class="card">
-                <h2>Analysis Results</h2>
-                
-                <div class="summary-section" id="summarySection"></div>
-
-                <div class="stats-grid" id="statsGrid"></div>
-
-                <div id="improvementsSection"></div>
+        <main class="main-content">
+            
+            <div id="loadingState" class="loading-state" style="display: none;">
+                <div class="spinner"></div>
+                <p>Analyzing property...</p>
             </div>
-        </div>
+
+            <div id="errorState" class="error-state" style="display: none;">
+                <div class="error-message"></div>
+            </div>
+
+            <section id="formSection" class="content-section active">
+                <div class="card">
+                    <h2>Property Analysis</h2>
+                    <form id="analysisForm">
+                        <div class="form-group">
+                            <label for="propertyReference">Address</label>
+                            <input type="text" id="propertyReference" placeholder="e.g., N11 1JH" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="budget">Budget (£)</label>
+                            <input type="number" id="budget" placeholder="e.g., 15000" required min="0">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Desired Improvements</label>
+                            <div class="checkbox-group">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="improvements" value="solar">
+                                    <span>Solar Panels</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="improvements" value="insulation">
+                                    <span>Insulation</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="improvements" value="windows">
+                                    <span>Windows</span>
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" name="improvements" value="heat_pump">
+                                    <span>Heat Pump</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn-primary" id="submitBtn">
+                            Analyze Property
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <section id="overviewSection" class="content-section">
+                <div class="card">
+                    <h2>Analysis Results</h2>
+                    <div class="summary-section" id="summarySection"></div>
+                    <div class="stats-grid" id="statsGrid"></div>
+                </div>
+            </section>
+
+            <section id="improvementsSectionWrapper" class="content-section">
+                <div class="card" id="improvementsSection"></div>
+            </section>
+
+            <section id="mapSection" class="content-section">
+                </section>
+
+            <section id="epcSection" class="content-section">
+                </section>
+
+        </main>
     </div>
 
     <script src="script.js"></script>
