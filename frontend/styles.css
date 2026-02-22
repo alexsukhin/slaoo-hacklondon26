@@ -707,3 +707,25 @@ body {
     font-weight: 500;
     color: var(--text-muted);
 }
+
+/* --- CONSERVATION AREA WARNING --- */
+.conservation-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background-color: #FDF3DB; /* Matches your status-med-bg */
+    border: 1px solid #E6D2A5;
+    border-left: 4px solid #7A5C13;
+    color: #7A5C13;
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+    line-height: 1.4;
+}
+
+.conservation-warning strong {
+    display: block;
+    margin-bottom: 4px;
+    color: #5C450E;
+}

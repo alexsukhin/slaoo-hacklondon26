@@ -46,9 +46,9 @@ async def calculate_feasibility(
     # Overrides for Conservation Areas
     if in_conservation_area:
         if improvement_type.lower() == "solar":
-            return "LOW - Conservation Area"
+            return "Conservation Area. Permitted Development (PD) rights heavily restricted. Ensure you have explicit planning permission."
         elif improvement_type.lower() == "windows":
-            return "LOW - Conservation Area (Suggest Secondary Glazing)"
+            return "Conservation Area.Permitted Development (PD) rights heavily restricted. Ensure you have explicit planning permission."
             
     # Standard logic
     if approved_count >= 3:

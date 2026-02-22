@@ -191,6 +191,7 @@ async function analyzeProperty(data) {
 }
 
 // Display results
+// Display results
 function displayResults(data) {
     hideGlobalStates();
 
@@ -216,8 +217,7 @@ function displayResults(data) {
             <div class="stat-label">Green Investment</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">£${(Math.round(data.total_value_increase / 100) * 100)
-    .toLocaleString()}</div>
+            <div class="stat-value">£${(Math.round(data.total_value_increase / 100) * 100).toLocaleString()}</div>
             <div class="stat-label">Green Premium</div>
         </div>
         <div class="stat-card">
@@ -240,12 +240,12 @@ function displayResults(data) {
         const prettyName = improvement.improvement_type.replace('_', ' ');
         
         const tabBtn = document.createElement('button');
-        tabBtn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
-        tabBtn.textContent = improvement.improvement_type.replace('_',' ');
+        tabBtn.className = `tab-btn ${isFirst ? 'active' : ''}`;
+        tabBtn.textContent = prettyName;
         tabsNav.appendChild(tabBtn);
         
         const tabPane = document.createElement('div');
-        tabPane.className = `tab-pane ${index === 0 ? 'active' : ''}`;
+        tabPane.className = `tab-pane ${isFirst ? 'active' : ''}`;
 
         const examplesHTML = improvement.examples && improvement.examples.length > 0
             ? `<div class="examples-section"><h4>Recent Approved Examples:</h4>
@@ -257,12 +257,36 @@ function displayResults(data) {
                  </div>`).join('')}</div>`
             : '<div class="examples-section"><p style="color:#999;">No recent examples found</p></div>';
 
+        const rawFeasibility = improvement.feasibility || "LOW";
+        
+        // Bulletproof way to extract the base rating. If it doesn't say HIGH or MEDIUM, it defaults to LOW.
+        let baseFeasibility = "LOW";
+        if (rawFeasibility.toUpperCase().includes("HIGH")) baseFeasibility = "HIGH";
+        else if (rawFeasibility.toUpperCase().includes("MEDIUM")) baseFeasibility = "MEDIUM";
+        
+        const isConservation = rawFeasibility.includes('Conservation Area');
+        
+        // Create a prominent warning banner if it's in a conservation area
+        const warningHTML = isConservation ? `
+            <div class="conservation-warning">
+                <span style="font-size: 1.2rem;">🏛️</span>
+                <div>
+                    <strong>Conservation Area Constraints Apply</strong><br>
+                    ${rawFeasibility.replace(baseFeasibility + ' - ', '')}
+                </div>
+            </div>
+        ` : '';
+        // ------------------------------------
+
         tabPane.innerHTML = `
             <div class="improvement-item">
                 <div class="improvement-header">
-                    <div class="improvement-title">${improvement.improvement_type.replace('_',' ')}</div>
-                    <div class="feasibility-badge feasibility-${improvement.feasibility}">${improvement.feasibility} FEASIBILITY</div>
+                    <div class="improvement-title">${prettyName}</div>
+                    <div class="feasibility-badge feasibility-${baseFeasibility}">${baseFeasibility} FEASIBILITY</div>
                 </div>
+                
+                ${warningHTML}
+
                 <div class="improvement-details">
                     <div class="detail-item">
                         <div class="detail-label">Green Investment</div>
@@ -274,8 +298,7 @@ function displayResults(data) {
                     </div>
                     <div class="detail-item highlight-box">
                         <div class="detail-label">Green Premium</div>
-                        <div class="detail-value">£${Math.round(improvement.green_premium_value / 100) * 100
-    .toLocaleString()}</div>
+                        <div class="detail-value">£${(Math.round(improvement.green_premium_value / 100) * 100).toLocaleString()}</div>
                         ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
                     </div>
                     <div class="detail-item">
@@ -436,7 +459,6 @@ function displayResults(data) {
         epcSection.appendChild(epcCard);
     }
 }
-
 function showError(message) {
     hideGlobalStates();
     errorState.style.display = 'block';
