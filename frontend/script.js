@@ -1,6 +1,7 @@
 const API_BASE_URL = 'http://localhost:8000';
 
 let MAPBOX_TOKEN = "";
+let mapInstances = {};
 
 async function loadConfig() {
     try {
@@ -44,25 +45,20 @@ form.addEventListener('submit', async (e) => {
     await analyzeProperty(requestData);
 });
 
-
+// Render map and ensure it fills container and all markers appear
 function renderMap(containerId, centerLat, centerLng, markers = []) {
-    if (!MAPBOX_TOKEN) return console.error("Mapbox token not loaded yet!");
+    if (mapInstances[containerId]) mapInstances[containerId].remove();
 
-    // Remove old map if exists
-    const oldMap = document.getElementById(containerId);
-    if (oldMap) oldMap.remove();
+    const oldCard = document.getElementById(containerId + "Card");
+    if (oldCard) oldCard.remove();
 
-    // Map container card
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
+    mapCard.id = containerId + "Card";
     mapCard.style.marginTop = '20px';
-    mapCard.innerHTML = `
-        <h3>Property Location</h3>
-        <div id="${containerId}" style="height: 400px; border-radius: 8px;"></div>
-    `;
+    mapCard.innerHTML = `<div id="${containerId}" style="height:400px;width:100%;border-radius:8px;"></div>`;
     resultsContainer.appendChild(mapCard);
 
-    // Initialize Mapbox
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
         container: containerId,
@@ -71,19 +67,26 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
         zoom: 15
     });
 
-    // Add each marker
     markers.forEach(marker => {
-        new mapboxgl.Marker({ color: marker.color || '#e63946' })
-            .setLngLat([marker.lng, marker.lat])
-            .addTo(map);
-
-        if (marker.label) {
-            new mapboxgl.Popup({ offset: 25 })
+        if (marker.lat != null && marker.lng != null) {
+            new mapboxgl.Marker({ color: marker.color || '#e63946' })
                 .setLngLat([marker.lng, marker.lat])
-                .setHTML(`<strong>${marker.label}</strong>`)
                 .addTo(map);
+
+            if (marker.label) {
+                new mapboxgl.Popup({ offset: 25 })
+                    .setLngLat([marker.lng, marker.lat])
+                    .setHTML(`<strong>${marker.label}</strong>`)
+                    .addTo(map);
+            }
         }
     });
+
+    // Save map instance
+    mapInstances[containerId] = map;
+
+    // Force resize after container becomes visible
+    setTimeout(() => map.resize(), 100);
 }
 async function analyzeProperty(data) {
     hideAll();
