@@ -492,10 +492,58 @@ input[type="number"]:focus {
     }
 }
 
-.epc-A { color: #008000; }
-.epc-B { color: #4CAF50; }
-.epc-C { color: #8BC34A; }
-.epc-D { color: #FFC107; }
-.epc-E { color: #FF9800; }
-.epc-F { color: #F44336; }
-.epc-G { color: #B71C1C; }
+
+.epc-card {
+    background-color: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    margin-top: 24px;
+}
+
+.epc-card h3 {
+    margin-bottom: 16px;
+    font-size: 18px;
+    color: #333;
+}
+
+.epc-bar-container {
+    display: flex;
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 12px;
+}
+
+.epc-segment {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 14px;
+    position: relative;
+    cursor: default;
+}
+
+/* Legend */
+.epc-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #555;
+    margin-top: 8px;
+}
+
+.epc-legend span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.epc-legend .box {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}

@@ -192,57 +192,98 @@ function displayResults(data) {
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
 
-// ================================
-// Energy Compliance Section
-// ================================
+    const EPC_SETTINGS = {
+        colors: {
+            current: '#2b2d42',
+            predicted: '#8d99ae',
+            goal: '#edf2f4',
+            belowGoal: '#fbeaec', // fallback for bands below goal
+            belowGoalText: '#7a222b',
+            goalText: '#000',      // text on goal band
+            predictedText: '#fff',
+            currentText: '#fff',
+        },
+        epcOrder: ["G","F","E","D","C","B","A"],
+        goalBand: "C" // can be changed dynamically
+    };
 
     if (data.energy_compliance) {
-        // Remove old compliance section if it exists
-        const oldCompliance = document.getElementById('energyComplianceSection');
-        if (oldCompliance) oldCompliance.remove();
-
         const compliance = data.energy_compliance;
 
-        const complianceSection = document.createElement('div');
-        complianceSection.id = 'energyComplianceSection';
-        complianceSection.className = 'card';
-        complianceSection.style.marginTop = '24px';
+        const oldCard = document.getElementById('epcCard');
+        if (oldCard) oldCard.remove();
 
-        const statusColor = compliance.compliance_status === "ON TRACK"
-            ? "var(--status-high-text)"
-            : "var(--status-low-text)";
+        const epcCard = document.createElement('div');
+        epcCard.id = 'epcCard';
+        epcCard.className = 'epc-card';
 
-        const suggestedHTML = compliance.suggested_improvements.length > 0
-            ? `<p><strong>Suggested Improvements:</strong> ${compliance.suggested_improvements.join(', ')}</p>`
-            : `<p><strong>No additional improvements needed.</strong></p>`;
+        const title = document.createElement('h3');
+        title.textContent = "Energy Compliance (EPC 2030 Target)";
+        epcCard.appendChild(title);
 
-        complianceSection.innerHTML = `
-            <h3 style="margin-bottom:20px;">Energy Compliance (EPC 2030 Target)</h3>
+        const epcBar = document.createElement('div');
+        epcBar.className = 'epc-bar-container';
 
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value epc-${compliance.current_epc}">${compliance.current_epc}</div>
-                    <div class="stat-label">Current EPC</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${compliance.projected_epc}</div>
-                    <div class="stat-label">Projected EPC</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" style="color:${statusColor}">
-                        ${compliance.compliance_status}
-                    </div>
-                    <div class="stat-label">2030 Compliance</div>
-                </div>
-            </div>
+        const currentIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.current_epc);
+        const projectedIndex = EPC_SETTINGS.epcOrder.indexOf(compliance.projected_epc);
+        const goalIndex = EPC_SETTINGS.epcOrder.indexOf(EPC_SETTINGS.goalBand);
 
-            <div style="margin-top:20px;">
-                ${suggestedHTML}
-            </div>
-        `;
-        resultsContainer.appendChild(complianceSection);
+        EPC_SETTINGS.epcOrder.forEach((band, i) => {
+            const segment = document.createElement('div');
+            segment.className = 'epc-segment';
+            segment.textContent = band;
+
+            // Assign colors dynamically
+            if (i <= currentIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.current;
+                segment.style.color = EPC_SETTINGS.colors.currentText;
+                segment.title = `${band} (Current)`;
+            } else if (i <= projectedIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.predicted;
+                segment.style.color = EPC_SETTINGS.colors.predictedText;
+                segment.title = `${band} (Predicted)`;
+            } else if (i <= goalIndex) {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.goal;
+                segment.style.color = EPC_SETTINGS.colors.goalText;
+                segment.title = `${band} (Goal)`;
+            } else {
+                segment.style.backgroundColor = EPC_SETTINGS.colors.belowGoal;
+                segment.style.color = EPC_SETTINGS.colors.belowGoalText;
+                segment.title = band;
+            }
+
+            epcBar.appendChild(segment);    
+        });
+
+        epcCard.appendChild(epcBar);
+
+        // Legend dynamically
+        const legend = document.createElement('div');
+        legend.className = 'epc-legend';
+
+        const legendItems = [
+            { label: 'Current', color: EPC_SETTINGS.colors.current, textColor: EPC_SETTINGS.colors.currentText },
+            { label: 'Predicted', color: EPC_SETTINGS.colors.predicted, textColor: EPC_SETTINGS.colors.predictedText },
+            { label: `Goal (EPC ${EPC_SETTINGS.goalBand} or better)`, color: EPC_SETTINGS.colors.belowGoalText, textColor: EPC_SETTINGS.colors.goalText }
+        ];
+
+        legendItems.forEach(item => {
+            const span = document.createElement('span');
+            const box = document.createElement('div');
+            box.className = 'box';
+            box.style.backgroundColor = item.color;
+            if(item.textColor) box.style.color = item.textColor;
+            span.appendChild(box);
+            const text = document.createTextNode(item.label);
+            span.appendChild(text);
+            legend.appendChild(span);
+        });
+
+        epcCard.appendChild(legend);
+
+        resultsContainer.appendChild(epcCard);
     }
-    
+        
     resultsContainer.style.display = 'block';
     resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
