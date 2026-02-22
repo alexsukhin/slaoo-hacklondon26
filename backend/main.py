@@ -143,7 +143,15 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             )
 
             roi = calculate_roi(estimated_cost, value_increase)
-            feasibility = calculate_feasibility(len(matching))
+            
+            # Make sure to await the function and pass the coordinates
+            feasibility = await calculate_feasibility(
+                improvement_type=improvement_type,
+                approved_count=len(matching),
+                latitude=latitude,
+                longitude=longitude
+            )
+            
             co2_kg, kwh = get_environmental_impact(improvement_type)
 
             improvements_analysis.append(ImprovementAnalysis(
