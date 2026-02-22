@@ -12,6 +12,13 @@ class EPCClient:
         self.api_key = os.getenv("EPC_API_KEY")
         self.base_url = "https://epc.opendatacommunities.org/api/v1/domestic/search"
 
+        self.improvement_scores = {
+            "insulation": -1,
+            "heat_pump": -2,
+            "solar": -1,
+            "windows": -1
+        }
+
     # Updated signature to accept postcode
     async def get_property_metrics(self, address: str, postcode: str) -> Dict[str, Any]:
         """Fetches floor area and current efficiency from real EPC records."""
