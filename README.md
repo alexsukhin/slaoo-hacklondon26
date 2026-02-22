@@ -1,12 +1,23 @@
-# Proptech ROI Analysis
+# Proptech ROI Analysis - Green Brick
 
 Full-stack application for analyzing cost-benefit of property energy efficiency upgrades.
 
 - **Backend**: FastAPI server for property retrofit analysis
-- **Frontend**: Simple, clean web interface
+- **Frontend**: Clean web interface via HTML, CSS and JavaScript
 
-# Documentation
-https://docs.google.com/document/d/1H52GHHYp-OG4oMswCknATX_GKw4Fb3UlC-6oFadPjUg/edit?tab=t.0
+## Devpost
+
+https://devpost.com/software/slao
+
+## About Green Brick
+
+Green Brick helps homeowners plan energy efficiency upgrades by turning fragmented data (EPC ratings, property values, planning approvals) into actionable insights.
+
+With Green Brick, users can:
+- **See the potential ROI**
+- **Check Feasibility**
+- **Measure environmental feedback**
+- **Explore Nearby Examples**
 
 ## Quick Start
 
@@ -22,11 +33,8 @@ cd backend
 # Create venv
 python3 -m venv venv
 
-# Activate (Linux/Mac)
+# Activate
 source venv/bin/activate
-
-# Activate (Windows)
-venv\Scripts\activate
 ```
 
 3. Install dependencies:
@@ -50,29 +58,7 @@ cd frontend
 
 2. Start a simple HTTP server:
 ```bash
-# Using Python
 python -m http.server 8080
-
-# OR using Node.js
-npx http-server -p 8080
 ```
 
 3. Open your browser to `http://localhost:8080`
-
-## Project Structure
-
-```
-.
-├── backend/
-│   ├── main.py           # FastAPI application
-│   ├── models.py         # Pydantic models
-│   ├── ibex_client.py    # Planning data API client
-│   └── geocoding.py      # UPRN geocoding
-├── frontend/
-│   ├── index.html        # Main page
-│   ├── styles.css        # Styling
-│   ├── script.js         # API integration
-│   └── README.md         # Frontend docs
-├── requirements.txt      # Python dependencies
-└── README.md            # This file
-```
