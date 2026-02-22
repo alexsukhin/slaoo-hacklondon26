@@ -216,7 +216,8 @@ function displayResults(data) {
             <div class="stat-label">Green Investment</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">£${data.total_value_increase.toLocaleString()}</div>
+            <div class="stat-value">£${(Math.round(data.total_value_increase / 100) * 100)
+    .toLocaleString()}</div>
             <div class="stat-label">Green Premium</div>
         </div>
         <div class="stat-card">
@@ -273,7 +274,8 @@ function displayResults(data) {
                     </div>
                     <div class="detail-item highlight-box">
                         <div class="detail-label">Green Premium</div>
-                        <div class="detail-value">£${improvement.green_premium_value.toLocaleString()}</div>
+                        <div class="detail-value">£${Math.round(improvement.green_premium_value / 100) * 100
+    .toLocaleString()}</div>
                         ${improvement.value_explanation ? `<div class="detail-explanation">${improvement.value_explanation}</div>` : ''}
                     </div>
                     <div class="detail-item">
