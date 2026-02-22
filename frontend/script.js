@@ -204,7 +204,8 @@ function displayResults(data) {
             currentText: '#fff',
         },
         epcOrder: ["G","F","E","D","C","B","A"],
-        goalBand: "C" // can be changed dynamically
+        goalBand: "C",
+        goalTextMuted: "Necessary EPC C by 2030"
     };
 
     if (data.energy_compliance) {
@@ -220,6 +221,15 @@ function displayResults(data) {
         const title = document.createElement('h3');
         title.textContent = "Energy Compliance (EPC 2030 Target)";
         epcCard.appendChild(title);
+
+        const mutedText = document.createElement('p');
+        mutedText.className = 'text-muted';
+        mutedText.style.fontSize = '0.85em';
+        mutedText.style.color = '#5B6B45';
+        mutedText.style.marginBottom = '8px';
+        mutedText.textContent = EPC_SETTINGS.goalTextMuted;
+
+        epcCard.appendChild(mutedText);
 
         const epcBar = document.createElement('div');
         epcBar.className = 'epc-bar-container';
@@ -264,7 +274,7 @@ function displayResults(data) {
         const legendItems = [
             { label: 'Current', color: EPC_SETTINGS.colors.current, textColor: EPC_SETTINGS.colors.currentText },
             { label: 'Predicted', color: EPC_SETTINGS.colors.predicted, textColor: EPC_SETTINGS.colors.predictedText },
-            { label: `Goal (EPC ${EPC_SETTINGS.goalBand} or better)`, color: EPC_SETTINGS.colors.belowGoalText, textColor: EPC_SETTINGS.colors.goalText }
+            { label: `Goal`, color: EPC_SETTINGS.colors.belowGoal, textColor: EPC_SETTINGS.colors.goalText }
         ];
 
         legendItems.forEach(item => {
