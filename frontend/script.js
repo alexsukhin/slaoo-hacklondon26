@@ -18,9 +18,33 @@ loadConfig();
 const form = document.getElementById('analysisForm');
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
-const resultsContainer = document.getElementById('resultsContainer');
 const submitBtn = document.getElementById('submitBtn');
 
+// Navigation Logic
+const navButtons = document.querySelectorAll('.nav-btn');
+const contentSections = document.querySelectorAll('.content-section');
+
+function switchTab(targetId) {
+    // Hide all sections and remove active classes from buttons
+    contentSections.forEach(section => section.classList.remove('active'));
+    navButtons.forEach(btn => btn.classList.remove('active'));
+
+    // Show target section and highlight corresponding button
+    document.getElementById(targetId).classList.add('active');
+    const activeBtn = document.querySelector(`.nav-btn[data-target="${targetId}"]`);
+    if(activeBtn) activeBtn.classList.add('active');
+
+    // VERY IMPORTANT: Mapbox requires a resize event if it was rendered while hidden
+    if (targetId === 'mapSection') {
+        Object.values(mapInstances).forEach(map => {
+            setTimeout(() => map.resize(), 50);
+        });
+    }
+}
+
+navButtons.forEach(btn => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.target));
+});
 
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -45,8 +69,10 @@ form.addEventListener('submit', async (e) => {
     await analyzeProperty(requestData);
 });
 
-// Render map and ensure it fills container and all markers appear
+// Render map targeting the specific map section
 function renderMap(containerId, centerLat, centerLng, markers = []) {
+    const mapSection = document.getElementById('mapSection');
+    
     if (mapInstances[containerId]) mapInstances[containerId].remove();
 
     const oldCard = document.getElementById(containerId + "Card");
@@ -55,9 +81,8 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
     const mapCard = document.createElement('div');
     mapCard.className = 'card';
     mapCard.id = containerId + "Card";
-    mapCard.style.marginTop = '20px';
-    mapCard.innerHTML = `<div id="${containerId}" style="height:400px;width:100%;border-radius:8px;"></div>`;
-    resultsContainer.appendChild(mapCard);
+    mapCard.innerHTML = `<h2 style="margin-bottom:20px;">Local Planning Examples</h2><div id="${containerId}" style="height:500px;width:100%;border-radius:8px;"></div>`;
+    mapSection.appendChild(mapCard);
 
     mapboxgl.accessToken = MAPBOX_TOKEN;
     const map = new mapboxgl.Map({
@@ -82,20 +107,18 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
         }
     });
 
-    // Save map instance
     mapInstances[containerId] = map;
-
-    // Force resize after container becomes visible
-    setTimeout(() => map.resize(), 100);
 }
+
 async function analyzeProperty(data) {
-    hideAll();
+    hideGlobalStates();
+    // Hide all main content while loading
+    contentSections.forEach(section => section.classList.remove('active'));
     loadingState.style.display = 'block';
     submitBtn.disabled = true;
     
-    // Construct the payload to match your AddressAnalysisRequest model
     const payload = {
-        address_query: data.property_reference, // Use the address entered in the UPRN box
+        address_query: data.property_reference, 
         budget: data.budget,
         desired_improvements: data.desired_improvements
     };
@@ -106,21 +129,25 @@ async function analyzeProperty(data) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload) // Send payload as JSON body
+            body: JSON.stringify(payload) 
         });
         
         if (!response.ok) {
             const error = await response.json();
-            // This handles the [object Object] error by converting the error detail to a string
             throw new Error(typeof error.detail === 'object' ? JSON.stringify(error.detail) : error.detail);
         }
         
         const results = await response.json();
         displayResults(results);
         
+        // Show navigation options and switch to Overview
+        document.getElementById('resultsNav').style.display = 'block';
+        switchTab('overviewSection');
+        
     } catch (error) {
         console.error('Error:', error);
         showError(error.message || 'Failed to analyze property.');
+        switchTab('formSection'); // Go back to form if it failed
     } finally {
         loadingState.style.display = 'none';
         submitBtn.disabled = false;
@@ -128,7 +155,7 @@ async function analyzeProperty(data) {
 }
 
 function displayResults(data) {
-    hideAll();
+    hideGlobalStates();
 
     // Summary section
     const summarySection = document.getElementById('summarySection');
@@ -161,10 +188,8 @@ function displayResults(data) {
     const improvementsSection = document.getElementById('improvementsSection');
     improvementsSection.innerHTML = '<h3 style="margin-bottom: 20px;">Improvement Analysis</h3>';
     
-    // Create containers for the Tabs and the Content
     const tabsNav = document.createElement('div');
     tabsNav.className = 'tabs-nav';
-    
     const tabsContent = document.createElement('div');
     tabsContent.className = 'tabs-content';
     
@@ -172,13 +197,11 @@ function displayResults(data) {
         const isFirst = index === 0;
         const prettyName = improvement.improvement_type.replace('_', ' ');
         
-        // 1. Create Tab Button
         const tabBtn = document.createElement('button');
         tabBtn.className = `tab-btn ${isFirst ? 'active' : ''}`;
         tabBtn.textContent = prettyName;
         tabsNav.appendChild(tabBtn);
         
-        // 2. Create Tab Content
         const tabPane = document.createElement('div');
         tabPane.className = `tab-pane ${isFirst ? 'active' : ''}`;
         
@@ -234,25 +257,19 @@ function displayResults(data) {
         `;
         tabsContent.appendChild(tabPane);
         
-        // 3. Add Click Event to Switch Tabs
         tabBtn.addEventListener('click', () => {
-            // Remove active class from all tabs and panes
             Array.from(tabsNav.children).forEach(btn => btn.classList.remove('active'));
             Array.from(tabsContent.children).forEach(pane => pane.classList.remove('active'));
             
-            // Add active class to clicked tab and corresponding pane
             tabBtn.classList.add('active');
             tabPane.classList.add('active');
         });
     });
     
-    // Append the nav and content to the DOM
     improvementsSection.appendChild(tabsNav);
     improvementsSection.appendChild(tabsContent);
 
-
     // Map
-    // Start with main property
     const markers = [
         {
             lat: data.location.latitude,
@@ -262,7 +279,6 @@ function displayResults(data) {
         }
     ];
 
-    // Loop through improvements and their examples (if they have lat/lng)
     data.improvements.forEach(imp => {
         imp.examples.forEach(example => {
             if (example.latitude && example.longitude) {
@@ -270,23 +286,23 @@ function displayResults(data) {
                     lat: example.latitude,
                     lng: example.longitude,
                     label: `${example.planning_reference}: ${imp.improvement_type}`,
-                    color: '#457b9d' // different color for examples
+                    color: '#457b9d' 
                 });
             }
         });
     });
 
-    // Render map with all markers, centered on main property
     renderMap("propertyMap", data.location.latitude, data.location.longitude, markers);
 
+    // EPC Settings
     const EPC_SETTINGS = {
         colors: {
             current: '#2b2d42',
             predicted: '#8d99ae',
             goal: '#edf2f4',
-            belowGoal: '#fbeaec', // fallback for bands below goal
+            belowGoal: '#fbeaec',
             belowGoalText: '#7a222b',
-            goalText: '#000',      // text on goal band
+            goalText: '#000',      
             predictedText: '#fff',
             currentText: '#fff',
         },
@@ -297,25 +313,25 @@ function displayResults(data) {
 
     if (data.energy_compliance) {
         const compliance = data.energy_compliance;
-
-        const oldCard = document.getElementById('epcCard');
-        if (oldCard) oldCard.remove();
+        const epcSection = document.getElementById('epcSection');
+        
+        // Clean out previous runs
+        epcSection.innerHTML = '';
 
         const epcCard = document.createElement('div');
         epcCard.id = 'epcCard';
-        epcCard.className = 'epc-card';
+        epcCard.className = 'card epc-card'; // Added .card class for styling
 
-        const title = document.createElement('h3');
-        title.textContent = "Energy Compliance (EPC 2030 Target)";
+        const title = document.createElement('h2');
+        title.textContent = "Energy Compliance Target";
         epcCard.appendChild(title);
 
         const mutedText = document.createElement('p');
         mutedText.className = 'text-muted';
-        mutedText.style.fontSize = '0.85em';
+        mutedText.style.fontSize = '0.95rem';
         mutedText.style.color = '#5B6B45';
-        mutedText.style.marginBottom = '8px';
+        mutedText.style.marginBottom = '20px';
         mutedText.textContent = EPC_SETTINGS.goalTextMuted;
-
         epcCard.appendChild(mutedText);
 
         const epcBar = document.createElement('div');
@@ -330,7 +346,6 @@ function displayResults(data) {
             segment.className = 'epc-segment';
             segment.textContent = band;
 
-            // Assign colors dynamically
             if (i <= currentIndex) {
                 segment.style.backgroundColor = EPC_SETTINGS.colors.current;
                 segment.style.color = EPC_SETTINGS.colors.currentText;
@@ -354,14 +369,14 @@ function displayResults(data) {
 
         epcCard.appendChild(epcBar);
 
-        // Legend dynamically
         const legend = document.createElement('div');
         legend.className = 'epc-legend';
+        legend.style.marginTop = '20px';
 
         const legendItems = [
-            { label: 'Current', color: EPC_SETTINGS.colors.current, textColor: EPC_SETTINGS.colors.currentText },
-            { label: 'Predicted', color: EPC_SETTINGS.colors.predicted, textColor: EPC_SETTINGS.colors.predictedText },
-            { label: `Goal`, color: EPC_SETTINGS.colors.belowGoal, textColor: EPC_SETTINGS.colors.goalText }
+            { label: 'Current Rating', color: EPC_SETTINGS.colors.current, textColor: EPC_SETTINGS.colors.currentText },
+            { label: 'Predicted Output', color: EPC_SETTINGS.colors.predicted, textColor: EPC_SETTINGS.colors.predictedText },
+            { label: 'Target Minimum', color: EPC_SETTINGS.colors.belowGoal, textColor: EPC_SETTINGS.colors.goalText }
         ];
 
         legendItems.forEach(item => {
@@ -377,27 +392,21 @@ function displayResults(data) {
         });
 
         epcCard.appendChild(legend);
-
-        resultsContainer.appendChild(epcCard);
+        epcSection.appendChild(epcCard);
     }
-        
-    resultsContainer.style.display = 'block';
-    resultsContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function showError(message) {
-    hideAll();
+    hideGlobalStates();
     errorState.style.display = 'block';
     document.querySelector('.error-message').textContent = message;
 }
 
-function hideAll() {
+function hideGlobalStates() {
     loadingState.style.display = 'none';
     errorState.style.display = 'none';
-    resultsContainer.style.display = 'none';
 }
 
-// Check API health on load
 async function checkHealth() {
     try {
         const response = await fetch(`${API_BASE_URL}/health`);

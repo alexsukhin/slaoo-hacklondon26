@@ -556,3 +556,127 @@ input[type="number"]:focus {
     width: 100%;
     height: 400px; /* or 100% if parent has height */
 }
+
+/* Update your body tag at the top of the file to remove padding */
+body {
+    font-family: var(--font-body);
+    background-color: var(--bg-beige);
+    color: var(--text-dark);
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Prevent body scrolling, allow main-content to scroll */
+}
+
+/* --- NEW DASHBOARD LAYOUT STYLES --- */
+.app-layout {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 280px;
+    background-color: var(--card-bg);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 30px 20px;
+    z-index: 10;
+    box-shadow: 2px 0 10px rgba(42, 54, 24, 0.03);
+}
+
+.sidebar-header {
+    text-align: left;
+    margin-bottom: 40px;
+}
+
+.sidebar-header h1 {
+    font-size: 2rem;
+    margin-bottom: 4px;
+}
+
+.sidebar-header p {
+    font-size: 0.95rem;
+}
+
+.sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.nav-divider {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    margin: 20px 0 10px 10px;
+}
+
+.nav-btn {
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+    background-color: var(--bg-beige);
+    color: var(--primary-green);
+}
+
+.nav-btn.active {
+    background-color: var(--primary-green);
+    color: #FFFFFF;
+    font-weight: 600;
+}
+
+/* Main Content Area */
+.main-content {
+    flex: 1;
+    padding: 40px;
+    overflow-y: auto;
+    position: relative;
+}
+
+.content-section {
+    display: none;
+    animation: fadeIn 0.4s ease;
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+.content-section.active {
+    display: block;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .app-layout {
+        flex-direction: column;
+    }
+    .sidebar {
+        width: 100%;
+        height: auto;
+        padding: 20px;
+        border-right: none;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .sidebar-header {
+        margin-bottom: 20px;
+    }
+    .main-content {
+        padding: 20px;
+    }
+}
