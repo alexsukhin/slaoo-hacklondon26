@@ -25,6 +25,9 @@ class RetrofitExample(BaseModel):
     decision_time_days: Optional[int]
     application_date: str
     decided_date: Optional[str]
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    current_energy_rating: Optional[str] = None
 
 class ImprovementAnalysis(BaseModel):
     improvement_type: str

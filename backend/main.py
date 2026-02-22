@@ -74,13 +74,13 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         # Pass both the raw address AND the clean postcode
         property_metrics = await epc_client.get_property_metrics(request.address_query, extracted_postcode)
 
-        current_epc = property_metrics.get("current_energy_rating", "D")
+        current_energy_rating = property_metrics.get("current_energy_rating", "D")
 
         epc_per_improvement = {}
         
         for imp in request.desired_improvements:
             projected = epc_client.estimate_epc_after_improvements(
-                current_band=current_epc,
+                current_band=current_energy_rating,
                 improvements=[imp]
             )
             epc_per_improvement[imp] = projected
@@ -126,7 +126,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
         for improvement_type in request.desired_improvements:
             matching = filter_by_improvement_type(applications, improvement_type)
             avg_time = calculate_average_approval_time(matching)
-            examples = extract_examples(matching, limit=5)
+            examples = extract_examples(matching, property_metrics=property_metrics, limit=5)
 
             estimated_cost, cost_explanation = calculate_cost(
                 improvement_type=improvement_type, 

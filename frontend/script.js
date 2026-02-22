@@ -3,6 +3,7 @@ const API_BASE_URL = 'http://localhost:8000';
 let MAPBOX_TOKEN = "";
 let mapInstances = {};
 
+// Load Mapbox token from backend
 async function loadConfig() {
     try {
         const res = await fetch(`${API_BASE_URL}/api/config`);
@@ -12,14 +13,20 @@ async function loadConfig() {
         console.error("Failed to load Mapbox token:", err);
     }
 }
-
 loadConfig();
 
+// Form elements
 const form = document.getElementById('analysisForm');
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
 const submitBtn = document.getElementById('submitBtn');
+const resultsContainer = document.getElementById('resultsContainer');
 
+// Normalize EPC band safely
+function normalizeEpcBand(band) {
+    if (!band) return "D";
+    return band.toUpperCase().trim();
+}
 // Navigation Logic
 const navButtons = document.querySelectorAll('.nav-btn');
 const contentSections = document.querySelectorAll('.content-section');
@@ -46,28 +53,19 @@ navButtons.forEach(btn => {
     btn.addEventListener('click', () => switchTab(btn.dataset.target));
 });
 
-form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const propertyReference = document.getElementById('propertyReference').value;
-    const budget = parseFloat(document.getElementById('budget').value);
-    
-    const improvementCheckboxes = document.querySelectorAll('input[name="improvements"]:checked');
-    const desiredImprovements = Array.from(improvementCheckboxes).map(cb => cb.value);
-    
-    if (desiredImprovements.length === 0) {
-        showError('Please select at least one improvement type');
-        return;
-    }
-    
-    const requestData = {
-        property_reference: propertyReference,
-        budget: budget,
-        desired_improvements: desiredImprovements
+// Map marker color by EPC
+function getEpcColor(band) {
+    const epcColors = {
+        A: '#1a9641',
+        B: '#4daf4a',
+        C: '#a6d96a',
+        D: '#ffffbf',
+        E: '#fdae61',
+        F: '#f46d43',
+        G: '#d73027'
     };
-    
-    await analyzeProperty(requestData);
-});
+    return epcColors[normalizeEpcBand(band)] || '#457b9d';
+}
 
 // Render map targeting the specific map section
 function renderMap(containerId, centerLat, centerLng, markers = []) {
@@ -92,23 +90,61 @@ function renderMap(containerId, centerLat, centerLng, markers = []) {
         zoom: 15
     });
 
+    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+
     markers.forEach(marker => {
         if (marker.lat != null && marker.lng != null) {
-            new mapboxgl.Marker({ color: marker.color || '#e63946' })
-                .setLngLat([marker.lng, marker.lat])
-                .addTo(map);
+            const el = document.createElement('div');
+            const size = marker.size || 14;
+            el.style.width = size + 'px';
+            el.style.height = size + 'px';
+            el.style.borderRadius = '50%';
+            el.style.backgroundColor = getEpcColor(marker.epc);
+            el.style.border = '1.5px solid white';
+            el.style.boxShadow = '0 0 6px rgba(0,0,0,0.4)';
+            el.style.cursor = 'pointer';
+
+            const markerInstance = new mapboxgl.Marker(el).setLngLat([marker.lng, marker.lat]);
 
             if (marker.label) {
-                new mapboxgl.Popup({ offset: 25 })
-                    .setLngLat([marker.lng, marker.lat])
-                    .setHTML(`<strong>${marker.label}</strong>`)
-                    .addTo(map);
+                const popup = new mapboxgl.Popup({ offset: 12 }).setHTML(marker.label);
+                markerInstance.setPopup(popup);
             }
+
+            markerInstance.addTo(map);
         }
     });
 
     mapInstances[containerId] = map;
+    setTimeout(() => map.resize(), 100);
 }
+
+// Form submission
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const propertyReference = document.getElementById('propertyReference').value;
+    const budget = parseFloat(document.getElementById('budget').value);
+
+    const improvementCheckboxes = document.querySelectorAll('input[name="improvements"]:checked');
+    const desiredImprovements = Array.from(improvementCheckboxes).map(cb => cb.value.toLowerCase());
+
+    if (desiredImprovements.length === 0) {
+        showError('Please select at least one improvement type');
+        return;
+    }
+
+    const addressQuery = document.getElementById('propertyAddress')?.value || propertyReference;
+
+    const requestData = {
+        address_query: addressQuery,
+        budget: budget,
+        desired_improvements: desiredImprovements
+    };
+
+    await analyzeProperty(requestData);
+});
+
 
 async function analyzeProperty(data) {
     hideGlobalStates();
@@ -118,7 +154,7 @@ async function analyzeProperty(data) {
     submitBtn.disabled = true;
     
     const payload = {
-        address_query: data.property_reference, 
+        address_query: data.address_query, 
         budget: data.budget,
         desired_improvements: data.desired_improvements
     };
@@ -131,12 +167,12 @@ async function analyzeProperty(data) {
             },
             body: JSON.stringify(payload) 
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(typeof error.detail === 'object' ? JSON.stringify(error.detail) : error.detail);
         }
-        
+
         const results = await response.json();
         displayResults(results);
         
@@ -154,14 +190,15 @@ async function analyzeProperty(data) {
     }
 }
 
+// Display results
 function displayResults(data) {
     hideGlobalStates();
 
-    // Summary section
+    // Summary
     const summarySection = document.getElementById('summarySection');
     summarySection.innerHTML = `<p><strong>Summary:</strong> ${data.summary}</p>`;
-    
-    // Stats grid
+
+    // Stats
     const statsGrid = document.getElementById('statsGrid');
     const withinBudget = data.total_cost <= data.budget;
     const treesEquivalent = Math.round(data.total_co2_savings / 21);
@@ -187,8 +224,8 @@ function displayResults(data) {
             <div class="stat-label">Within Budget</div>
         </div>
     `;
-    
-    // Improvements section (Tabbed Interface)
+
+    // Improvements tabs
     const improvementsSection = document.getElementById('improvementsSection');
     improvementsSection.innerHTML = '<h3 style="margin-bottom: 20px;">Improvement Analysis</h3>';
     
@@ -202,36 +239,28 @@ function displayResults(data) {
         const prettyName = improvement.improvement_type.replace('_', ' ');
         
         const tabBtn = document.createElement('button');
-        tabBtn.className = `tab-btn ${isFirst ? 'active' : ''}`;
-        tabBtn.textContent = prettyName;
+        tabBtn.className = `tab-btn ${index === 0 ? 'active' : ''}`;
+        tabBtn.textContent = improvement.improvement_type.replace('_',' ');
         tabsNav.appendChild(tabBtn);
         
         const tabPane = document.createElement('div');
-        tabPane.className = `tab-pane ${isFirst ? 'active' : ''}`;
-        
-        const examplesHTML = improvement.examples && improvement.examples.length > 0 
-            ? `
-                <div class="examples-section">
-                    <h4>Recent Approved Examples:</h4>
-                    ${improvement.examples.slice(0, 3).map(example => `
-                        <div class="example-item">
-                            <span class="example-ref">${example.planning_reference}</span>
-                            ${example.decision_time_days ? `<span> - Approved in ${example.decision_time_days} days</span>` : ''}
-                            <br>
-                            <span style="color: #666;">${example.proposal.substring(0, 100)}${example.proposal.length > 100 ? '...' : ''}</span>
-                        </div>
-                    `).join('')}
-                </div>
-            `
-            : '<div class="examples-section"><p style="color: #999;">No recent examples found</p></div>';
-        
+        tabPane.className = `tab-pane ${index === 0 ? 'active' : ''}`;
+
+        const examplesHTML = improvement.examples && improvement.examples.length > 0
+            ? `<div class="examples-section"><h4>Recent Approved Examples:</h4>
+               ${improvement.examples.slice(0,3).map(ex => `
+                 <div class="example-item">
+                   <span class="example-ref">${ex.planning_reference}</span>
+                   ${ex.decision_time_days ? ` - ${ex.decision_time_days} days` : ''}
+                   <br><span style="color:#666;">${ex.proposal.substring(0,100)}${ex.proposal.length>100?'...':''}</span>
+                 </div>`).join('')}</div>`
+            : '<div class="examples-section"><p style="color:#999;">No recent examples found</p></div>';
+
         tabPane.innerHTML = `
             <div class="improvement-item">
                 <div class="improvement-header">
-                    <div class="improvement-title">${prettyName}</div>
-                    <div class="feasibility-badge feasibility-${improvement.feasibility}">
-                        ${improvement.feasibility} FEASIBILITY
-                    </div>
+                    <div class="improvement-title">${improvement.improvement_type.replace('_',' ')}</div>
+                    <div class="feasibility-badge feasibility-${improvement.feasibility}">${improvement.feasibility} FEASIBILITY</div>
                 </div>
                 <div class="improvement-details">
                     <div class="detail-item">
@@ -255,6 +284,7 @@ function displayResults(data) {
                 ${examplesHTML}
             </div>
         `;
+
         tabsContent.appendChild(tabPane);
         
         tabBtn.addEventListener('click', () => {
@@ -274,17 +304,19 @@ function displayResults(data) {
         lat: data.location.latitude,
         lng: data.location.longitude,
         label: `Current Property: ${data.property_reference}`,
-        color: '#e63946'
+        epc: data.energy_compliance?.current_epc,
+        size: 16
     }];
 
     data.improvements.forEach(imp => {
-        imp.examples.forEach(example => {
-            if (example.latitude && example.longitude) {
+        imp.examples.forEach(ex => {
+            if(ex.latitude && ex.longitude){
                 markers.push({
-                    lat: example.latitude,
-                    lng: example.longitude,
-                    label: `${example.planning_reference}: ${imp.improvement_type}`,
-                    color: '#457b9d' 
+                    lat: ex.latitude,
+                    lng: ex.longitude,
+                    label: `<strong>${ex.planning_reference}</strong><br>${imp.improvement_type}<br>EPC: ${normalizeEpcBand(ex.current_energy_rating) || 'Unknown'}`,
+                    epc: normalizeEpcBand(ex.current_energy_rating),
+                    size: 12,
                 });
             }
         });
@@ -417,12 +449,9 @@ function hideGlobalStates() {
 async function checkHealth() {
     try {
         const response = await fetch(`${API_BASE_URL}/health`);
-        if (!response.ok) {
-            console.warn('API health check failed');
-        }
+        if (!response.ok) console.warn('API health check failed');
     } catch (error) {
         console.warn('Could not connect to API:', error);
     }
 }
-
 checkHealth();
