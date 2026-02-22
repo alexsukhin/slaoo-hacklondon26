@@ -15,9 +15,9 @@ Green Brick helps homeowners plan energy efficiency upgrades by turning fragment
 
 With Green Brick, users can:
 - **See the potential ROI**
-- **Check Feasibility**
+- **Check feasibility**
 - **Measure environmental feedback**
-- **Explore Nearby Examples**
+- **Explore nearby examples**
 
 ## Quick Start
 
