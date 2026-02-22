@@ -179,13 +179,13 @@ async def fetch_property_context(address: str, postcode: str) -> Tuple[str, floa
 def calculate_value_increase(
     improvement_type: str, 
     estimated_cost: float, 
-    current_epc: str, 
+    current_energy_rating: str, 
     property_value: Optional[float] = None,
     recommendations: Optional[List[Dict[str, Any]]] = None
 ) -> Tuple[float, str]:
     """Calculates ROI using real EPC recommendations where available, with a static fallback."""
     improvement_key = improvement_type.lower()
-    current_index = EPC_BANDS.index(current_epc)
+    current_index = EPC_BANDS.index(current_energy_rating)
     
     new_epc = None
     used_real_recommendation = False
@@ -266,7 +266,7 @@ def calculate_value_increase(
         new_index = min(current_index + band_jump, len(EPC_BANDS) - 1)
         new_epc = EPC_BANDS[new_index]
     
-    current_premium = EPC_PREMIUMS[current_epc]
+    current_premium = EPC_PREMIUMS[current_energy_rating]
     new_premium = EPC_PREMIUMS[new_epc]
     net_premium_increase = new_premium - current_premium
     
@@ -275,16 +275,16 @@ def calculate_value_increase(
         
         # Build a smarter explanation based on how we got the data
         if used_real_recommendation:
-            explanation = f"Officially recommended on property's EPC. Expected to boost rating from {current_epc} to {new_epc}. Based on a {(net_premium_increase*100):.1f}% market premium on local property value (£{property_value:,.0f})."
+            explanation = f"Officially recommended on property's EPC. Expected to boost rating from {current_energy_rating} to {new_epc}. Based on a {(net_premium_increase*100):.1f}% market premium on local property value (£{property_value:,.0f})."
         else:
-            explanation = f"Estimated to boost EPC from {current_epc} to {new_epc}. Based on a {(net_premium_increase*100):.1f}% market premium on local property value (£{property_value:,.0f})."
+            explanation = f"Estimated to boost EPC from {current_energy_rating} to {new_epc}. Based on a {(net_premium_increase*100):.1f}% market premium on local property value (£{property_value:,.0f})."
     else:
         # Failsafe logic
         value_increase = 285000 * net_premium_increase
-        explanation = f"Boosts EPC from {current_epc} to {new_epc}. Estimated {(net_premium_increase*100):.1f}% green premium (Using national average value)."
+        explanation = f"Boosts EPC from {current_energy_rating} to {new_epc}. Estimated {(net_premium_increase*100):.1f}% green premium (Using national average value)."
     
     if value_increase <= 0:
         value_increase = estimated_cost * 0.5
-        explanation = f"Property is already highly efficient ({current_epc}). Value increase reflects partial cost retention rather than a market premium jump."
+        explanation = f"Property is already highly efficient ({current_energy_rating}). Value increase reflects partial cost retention rather than a market premium jump."
         
     return value_increase, explanation

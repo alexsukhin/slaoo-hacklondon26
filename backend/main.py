@@ -137,7 +137,7 @@ async def analyze_by_address(request: AddressAnalysisRequest):
             value_increase, value_explanation = calculate_value_increase(
                 improvement_type=improvement_type,
                 estimated_cost=estimated_cost,
-                current_epc=current_epc,
+                current_energy_rating=current_energy_rating,
                 property_value=property_value,
                 recommendations=recommendations 
             )
